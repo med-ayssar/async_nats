@@ -1,18 +1,18 @@
 {
   description = "async_nats";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
     let
-      systems = [
-        "aarch64-darwin"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "x86_64-linux"
-      ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems f;
       # Nixpkgs Boost 1.90 has Cobalt headers and no libboost_cobalt.
       # Replace pkgs.boost190 with the C++23 Cobalt build.
       boostOverlay = final: prev: {
@@ -78,19 +78,21 @@
           ++ builtins.attrValues libraries;
         };
     in
-    {
+    flake-utils.lib.eachDefaultSystem (
+      system: {
+        packages = {
+          default = packageFor system "clang";
+          clang = packageFor system "clang";
+          gcc = packageFor system "gcc";
+        };
+        devShells = {
+          default = shellFor system "clang";
+          clang = shellFor system "clang";
+          gcc = shellFor system "gcc";
+        };
+      }
+    )
+    // {
       overlays.default = boostOverlay;
-
-      packages = forAllSystems (system: {
-        default = packageFor system "clang";
-        clang = packageFor system "clang";
-        gcc = packageFor system "gcc";
-      });
-
-      devShells = forAllSystems (system: {
-        default = shellFor system "clang";
-        clang = shellFor system "clang";
-        gcc = shellFor system "gcc";
-      });
     };
 }
