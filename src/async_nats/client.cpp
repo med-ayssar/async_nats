@@ -95,6 +95,7 @@ struct client::impl {
   std::unordered_map<std::uint64_t, pending> waiters;
   std::unordered_map<std::uint64_t, message_handler> handlers;
   std::unordered_map<std::string, std::vector<std::uint64_t>> routes;
+  std::vector<std::coroutine_handle<>> close_waiters;
   bool failed = false;
   std::string fail_reason;
 
@@ -260,6 +261,9 @@ struct client::impl {
       handles.push_back(waiter.handle);
     }
     waiters.clear();
+    auto closing = std::move(close_waiters);
+    close_waiters.clear();
+    handles.insert(handles.end(), closing.begin(), closing.end());
     for (auto handle : handles) {
       boost::asio::post(socket.get_executor(), [handle] { handle.resume(); });
     }
@@ -466,6 +470,26 @@ auto client::unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::ta
     }
     impl_->routes.erase(subject);
   }
+}
+
+auto client::closed() -> boost::cobalt::task<void> {
+  if (!impl_) {
+    throw error("client is not connected");
+  }
+  co_await impl_->enter();
+  if (impl_->failed) {
+    throw error(impl_->fail_reason.empty() ? "connection closed" : impl_->fail_reason);
+  }
+
+  struct wait {
+    impl* self = nullptr;
+    bool await_ready() const noexcept { return false; }
+    void await_suspend(std::coroutine_handle<> handle) { self->close_waiters.push_back(handle); }
+    void await_resume() const noexcept {}
+  };
+
+  co_await wait{impl_.get()};
+  throw error(impl_->fail_reason.empty() ? "connection closed" : impl_->fail_reason);
 }
 
 auto subscription::next() -> boost::cobalt::task<message> {
