@@ -250,6 +250,9 @@ struct client::impl {
   }
 
   void fail_waiters(std::string reason) {
+    if (failed) {
+      return;
+    }
     failed = true;
     fail_reason = std::move(reason);
     std::vector<std::coroutine_handle<>> handles;
@@ -470,6 +473,23 @@ auto client::unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::ta
     }
     impl_->routes.erase(subject);
   }
+}
+
+auto client::close() -> boost::cobalt::task<void> {
+  if (!impl_) {
+    co_return;
+  }
+  co_await impl_->enter();
+  if (impl_->failed && !impl_->socket.is_open()) {
+    co_return;
+  }
+  impl_->handlers.clear();
+  impl_->routes.clear();
+  boost::system::error_code error;
+  impl_->socket.cancel(error);
+  impl_->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
+  impl_->socket.close(error);
+  impl_->fail_waiters("connection closed");
 }
 
 auto client::closed() -> boost::cobalt::task<void> {

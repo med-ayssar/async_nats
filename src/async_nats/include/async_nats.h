@@ -64,6 +64,7 @@ class client {
   auto subscribe(std::string subject) -> boost::cobalt::task<subscription>;
   auto subscribe(std::vector<route> routes) -> boost::cobalt::task<void>;
   auto unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void>;
+  auto close() -> boost::cobalt::task<void>;
   auto closed() -> boost::cobalt::task<void>;
   auto request(std::string subject, std::string payload) -> boost::cobalt::task<std::string>;
   auto request(std::string subject, std::string payload,
