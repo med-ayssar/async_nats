@@ -14,7 +14,7 @@ async_nats::main co_main(int argc, char* argv[]) {
 
 The build uses Nix. C++ standard is 23. Choose Clang or GCC.
 
-Public dependencies come from nixpkgs: Boost 1.90 and spdlog. Nixpkgs does not ship Cobalt, so the flake builds that library with C++23.
+Public dependencies come from nixpkgs: Boost 1.90 and spdlog. Nixpkgs does not ship Cobalt, so `overlays.default` builds that library with C++23 and replaces `pkgs.boost190`.
 
 Private dependencies go in `libraries/default.nix`. Pin each one in `flake.nix` by branch (`?ref=`) or commit (`?rev=`), then add it to the set. The set is empty until you declare one:
 

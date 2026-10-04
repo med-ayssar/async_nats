@@ -13,25 +13,41 @@
         "x86_64-linux"
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems f;
+      # Nixpkgs Boost 1.90 has Cobalt headers and no libboost_cobalt.
+      # Replace pkgs.boost190 with the C++23 Cobalt build.
+      boostOverlay = final: prev: {
+        boost190 = prev.callPackage ./nix/boost-with-cobalt.nix {
+          boost = prev.boost190;
+        };
+      };
       stdenvOf =
-        pkgs: compiler:
-        if compiler == "gcc" then pkgs.gccStdenv else pkgs.clangStdenv;
-      depsFor =
-        pkgs: stdenv:
-        let
-          sameStdenv = stdenv == pkgs.stdenv;
-        in
-        {
-          boost = pkgs.callPackage ./nix/boost-with-cobalt.nix {
-            boost = if sameStdenv then pkgs.boost190 else pkgs.boost190.override { inherit stdenv; };
-          };
-          spdlog = if sameStdenv then pkgs.spdlog else pkgs.spdlog.override { inherit stdenv; };
+        prev: compiler:
+        if compiler == "gcc" then prev.gccStdenv else prev.clangStdenv;
+      pkgsFor =
+        system: compiler:
+        import nixpkgs {
+          inherit system;
+          overlays = [
+            (final: prev:
+              let
+                stdenv = stdenvOf prev compiler;
+              in
+              {
+                boost190 =
+                  if stdenv == prev.stdenv then prev.boost190
+                  else prev.boost190.override { inherit stdenv; };
+                spdlog =
+                  if stdenv == prev.stdenv then prev.spdlog
+                  else prev.spdlog.override { inherit stdenv; };
+              })
+            boostOverlay
+          ];
         };
       packageFor =
-        pkgs: system: compiler:
+        system: compiler:
         let
+          pkgs = pkgsFor system compiler;
           stdenv = stdenvOf pkgs compiler;
-          deps = depsFor pkgs stdenv;
           libraries = import ./libraries {
             inputs = { };
             inherit system compiler;
@@ -39,13 +55,14 @@
         in
         pkgs.callPackage ./package.nix {
           inherit stdenv libraries;
-          inherit (deps) boost spdlog;
+          boost = pkgs.boost190;
+          spdlog = pkgs.spdlog;
         };
       shellFor =
-        pkgs: system: compiler:
+        system: compiler:
         let
+          pkgs = pkgsFor system compiler;
           stdenv = stdenvOf pkgs compiler;
-          deps = depsFor pkgs stdenv;
           libraries = import ./libraries {
             inputs = { };
             inherit system compiler;
@@ -55,35 +72,25 @@
           packages = [
             pkgs.cmake
             pkgs.ninja
-            deps.boost
-            deps.spdlog
+            pkgs.boost190
+            pkgs.spdlog
           ]
           ++ builtins.attrValues libraries;
         };
     in
     {
-      packages = forAllSystems (
-        system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-        in
-        {
-          default = packageFor pkgs system "clang";
-          clang = packageFor pkgs system "clang";
-          gcc = packageFor pkgs system "gcc";
-        }
-      );
+      overlays.default = boostOverlay;
 
-      devShells = forAllSystems (
-        system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-        in
-        {
-          default = shellFor pkgs system "clang";
-          clang = shellFor pkgs system "clang";
-          gcc = shellFor pkgs system "gcc";
-        }
-      );
+      packages = forAllSystems (system: {
+        default = packageFor system "clang";
+        clang = packageFor system "clang";
+        gcc = packageFor system "gcc";
+      });
+
+      devShells = forAllSystems (system: {
+        default = shellFor system "clang";
+        clang = shellFor system "clang";
+        gcc = shellFor system "gcc";
+      });
     };
 }

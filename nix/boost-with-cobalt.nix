@@ -2,8 +2,8 @@
 # and the nixpkgs b2 invocation never passes cxxstd. Build Cobalt, and the
 # libraries its CMake package depends on, with C++23.
 #
-# Keep this file identical in async_nats and superbuild so both flakes
-# produce the same Boost store path.
+# overlays.default applies this to pkgs.boost190. docktopus uses that
+# overlay, so both flakes produce the same Boost store path.
 #
 # Cobalt's main.cpp defines main(). async_nats provides main, so the shared
 # library must not export another one. The io and io_ssl libraries are not
