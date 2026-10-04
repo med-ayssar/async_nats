@@ -41,10 +41,10 @@ BOOST_WITHOUT = (
 )
 
 
-class AsyncConan(ConanFile):
-    name = "async"
+class AsyncNatsConan(ConanFile):
+    name = "async_nats"
     version = "0.1.0"
-    package_type = "application"
+    package_type = "library"
     license = "MIT"
     settings = "os", "compiler", "build_type", "arch"
     exports_sources = "CMakeLists.txt", "src/*", "include/*", "cmake/*"
