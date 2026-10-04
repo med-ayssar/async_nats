@@ -20,11 +20,40 @@ class error : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+class client;
+
+struct message {
+  std::string subject;
+  std::string payload;
+  std::optional<std::string> reply;
+};
+
+class subscription {
+ public:
+  subscription() = default;
+  subscription(const subscription&) = delete;
+  auto operator=(const subscription&) -> subscription& = delete;
+  subscription(subscription&&) noexcept;
+  auto operator=(subscription&&) noexcept -> subscription&;
+  ~subscription();
+
+  auto next() -> boost::cobalt::task<message>;
+  auto unsubscribe() -> boost::cobalt::task<void>;
+
+ private:
+  struct state;
+  explicit subscription(std::shared_ptr<state> state);
+  std::shared_ptr<state> state_;
+
+  friend class client;
+};
+
 class client {
  public:
   client() = default;
 
   auto publish(std::string subject, std::string payload) -> boost::cobalt::task<void>;
+  auto subscribe(std::string subject) -> boost::cobalt::task<subscription>;
   auto request(std::string subject, std::string payload) -> boost::cobalt::task<std::string>;
   auto request(std::string subject, std::string payload,
                std::vector<std::pair<std::string, std::string>> headers) -> boost::cobalt::task<std::string>;
@@ -35,6 +64,7 @@ class client {
 
   std::shared_ptr<impl> impl_;
 
+  friend struct subscription::state;
   friend auto connect(std::string url) -> boost::cobalt::task<client>;
 };
 

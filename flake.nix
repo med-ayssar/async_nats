@@ -44,7 +44,7 @@
           ];
         };
       packageFor =
-        system: compiler:
+        system: compiler: buildType: withTests:
         let
           pkgs = pkgsFor system compiler;
           stdenv = stdenvOf pkgs compiler;
@@ -52,11 +52,14 @@
             inputs = { };
             inherit system compiler;
           };
+          cmakeBuildType = if buildType == "debug" then "Debug" else "Release";
         in
         pkgs.callPackage ./package.nix {
-          inherit stdenv libraries;
+          inherit stdenv libraries withTests;
+          buildType = cmakeBuildType;
           boost = pkgs.boost190;
           spdlog = pkgs.spdlog;
+          catch2_3 = pkgs.catch2_3;
         };
       shellFor =
         system: compiler:
@@ -74,19 +77,35 @@
             pkgs.ninja
             pkgs.boost190
             pkgs.spdlog
+            pkgs.catch2_3
           ]
           ++ builtins.attrValues libraries;
         };
     in
     flake-utils.lib.eachDefaultSystem (
-      system: {
+      system:
+      let
+        clangRelease = packageFor system "clang" "release" false;
+        gccRelease = packageFor system "gcc" "release" false;
+        tests = packageFor system "clang" "release" true;
+      in
+      {
         packages = {
-          default = packageFor system "clang";
-          clang = packageFor system "clang";
-          gcc = packageFor system "gcc";
+          default = clangRelease;
+          "async-nats-clang-release" = clangRelease;
+          "async-nats-clang-debug" = packageFor system "clang" "debug" false;
+          "async-nats-gcc-release" = gccRelease;
+          "async-nats-gcc-debug" = packageFor system "gcc" "debug" false;
+          "async-nats-tests" = tests;
+          # Short names used by docktopus: packages.${system}.${compiler}
+          clang = clangRelease;
+          gcc = gccRelease;
+          tests = tests;
         };
         devShells = {
           default = shellFor system "clang";
+          "async-nats-clang" = shellFor system "clang";
+          "async-nats-gcc" = shellFor system "gcc";
           clang = shellFor system "clang";
           gcc = shellFor system "gcc";
         };

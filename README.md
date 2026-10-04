@@ -21,7 +21,26 @@ async_nats::main co_main(int argc, char* argv[]) {
 }
 ```
 
-`async_nats::main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. Include `async_nats.h` only.
+`async_nats::main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. The client API is `<async_nats.h>`. The runtime is `<async_nats/core.h>`.
+
+`main` calls a private event loop to set up the runtime before `co_main`. That loop runs the `io_context` on one thread. `NATS_EVENT_LOOP_WORKER_THREADS` sizes the worker pool and defaults to 1. The pool accepts up to twice `std::thread::hardware_concurrency()`, and at least 2. A larger value is clamped. `async_nats::core::instance()` is the process-wide runtime: `io_threads()` returns 1, `worker_threads()` reports the pool size, and `thread_pool()` is the pool for `boost::asio::post`.
+
+```cpp
+#include <async_nats/core.h>
+
+boost::asio::post(async_nats::core::instance().thread_pool(), [] {
+  // blocking work
+});
+```
+
+`examples/pub_sub.cpp` connects, subscribes, publishes, and reads the message back. Build it with `-DBUILD_TESTS=ON`; the executable is `pub_sub`. It uses `NATS_URL`, or `nats://127.0.0.1:4222`.
+
+```cpp
+auto client = co_await async_nats::connect("nats://127.0.0.1:4222");
+auto subscription = co_await client.subscribe("async_nats.example");
+co_await client.publish("async_nats.example", "hello");
+auto message = co_await subscription.next();
+```
 
 The build uses Nix. C++ standard is 23. Choose Clang or GCC.
 
@@ -43,26 +62,39 @@ my_lib = inputs.my_lib.packages.${system}.${compiler};
 From this directory:
 
 ```bash
-./build.sh            # Clang, C++23
-./build.sh --clang
-./build.sh --gcc
+./build.sh            # async-nats-clang-release, plus compile_commands.json
+./build.sh --gcc --debug
+./install.sh          # async-nats-clang-release into the Nix profile
+./install.sh --clang --debug
 ```
+
+The flake packages are the four compiler and build-type combinations:
+
+```bash
+nix build .#async-nats-clang-release
+nix build .#async-nats-clang-debug
+nix build .#async-nats-gcc-release
+nix build .#async-nats-gcc-debug
+```
+
+`default`, `clang`, and `gcc` are the Release packages. `async-nats-tests` is the Clang Release library with `-DBUILD_TESTS=ON`. `nix build .#tests` is the same derivation.
 
 Nix installs the package and links it at `./result`:
 
 ```text
 result/lib/libasync_nats.a
 result/include/async_nats.h
+result/include/async_nats/core.h
 result/lib/cmake/async_nats/
 ```
 
-The same packages are `nix build .#clang` and `nix build .#gcc`.
+`./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. CMake writes that file because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides Boost and spdlog in its implicit include path, and CMake leaves those paths out of the database. The script writes them back as `-isystem` flags so Homebrew `clangd` can see them without running the Nix compiler. `nix build` alone keeps its database inside the sandbox.
 
 A development shell with the matching compiler, CMake, Ninja, Boost, and spdlog:
 
 ```bash
-nix develop .#clang
-nix develop .#gcc
+nix develop .#async-nats-clang
+nix develop .#async-nats-gcc
 ```
 
 Inside the shell, `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug` uses C++23 because the project sets `CMAKE_CXX_STANDARD` to 23.

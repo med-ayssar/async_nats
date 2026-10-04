@@ -17,13 +17,30 @@ set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release RelWithDebInfo "")
 
 find_package(Boost 1.90 REQUIRED CONFIG COMPONENTS cobalt)
 find_package(spdlog REQUIRED)
+find_package(Threads REQUIRED)
+
+add_library(async_nats_objects OBJECT
+    src/async_nats/client.cpp
+    src/async_nats/jetstream.cpp
+    src/async_nats/core.cpp
+)
+target_compile_features(async_nats_objects PUBLIC cxx_std_23)
+target_include_directories(async_nats_objects PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/include>
+)
+target_link_libraries(async_nats_objects PUBLIC
+    Boost::cobalt
+    spdlog::spdlog
+    Threads::Threads
+)
 
 add_library(async_nats STATIC
     src/async_nats/main.cpp
-    src/async_nats/client.cpp
-    src/async_nats/jetstream.cpp
+    src/async_nats/event_loop.cpp
+    $<TARGET_OBJECTS:async_nats_objects>
 )
 add_library(Nats::async_nats ALIAS async_nats)
+add_dependencies(async_nats async_nats_objects)
 
 set_target_properties(async_nats PROPERTIES
     EXPORT_NAME async_nats
@@ -40,6 +57,7 @@ target_include_directories(async_nats PUBLIC
 target_link_libraries(async_nats PUBLIC
     Boost::cobalt
     spdlog::spdlog
+    Threads::Threads
 )
 
 install(TARGETS async_nats
@@ -52,6 +70,11 @@ install(TARGETS async_nats
 install(FILES src/async_nats/include/async_nats.h
     COMPONENT library
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES src/async_nats/include/async_nats/core.h
+    COMPONENT library
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/async_nats
 )
 
 install(EXPORT async_natsTargets
@@ -79,6 +102,19 @@ install(FILES
     COMPONENT library
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/async_nats
 )
+
+option(BUILD_TESTS "Build the test targets" OFF)
+if(BUILD_TESTS)
+    enable_testing()
+    find_package(Catch2 3 REQUIRED CONFIG)
+    add_executable(async_nats_tests tests/core_test.cpp)
+    target_link_libraries(async_nats_tests PRIVATE async_nats_objects Catch2::Catch2WithMain)
+    target_include_directories(async_nats_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats)
+    add_test(NAME async_nats_tests COMMAND async_nats_tests)
+
+    add_executable(pub_sub examples/pub_sub.cpp)
+    target_link_libraries(pub_sub PRIVATE async_nats)
+endif()
 
 # The sample's entry point is boost::cobalt::main. A shared Cobalt library
 # does not provide the process entry point, so the Nix package turns this off.

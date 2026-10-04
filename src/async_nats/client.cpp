@@ -1,17 +1,26 @@
 #include <async_nats.h>
 
 #include <boost/asio/connect.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/read_until.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/cobalt/op.hpp>
+#include <boost/cobalt/spawn.hpp>
 #include <boost/cobalt/this_coro.hpp>
+#include <spdlog/spdlog.h>
 
 #include <coroutine>
+#include <cstdint>
 #include <deque>
+#include <exception>
 #include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace async_nats {
 namespace {
@@ -37,39 +46,96 @@ auto parse_url(std::string url) -> endpoint {
   return {url.substr(0, colon), url.substr(colon + 1)};
 }
 
+auto split(std::string_view line) -> std::vector<std::string_view> {
+  std::vector<std::string_view> parts;
+  std::size_t index = 0;
+  while (index < line.size()) {
+    while (index < line.size() && line[index] == ' ') {
+      ++index;
+    }
+    if (index >= line.size()) {
+      break;
+    }
+    const auto start = index;
+    while (index < line.size() && line[index] != ' ') {
+      ++index;
+    }
+    parts.emplace_back(line.substr(start, index - start));
+  }
+  return parts;
+}
+
+void require_subject(std::string_view subject) {
+  if (subject.empty() || subject.find_first_of(" \r\n") != std::string_view::npos) {
+    throw error("invalid subject");
+  }
+}
+
 }  // namespace
 
 struct client::impl {
+  struct inbound {
+    std::uint64_t sid = 0;
+    message message;
+  };
+
+  struct pending {
+    std::coroutine_handle<> handle;
+    message* result = nullptr;
+    bool* failed = nullptr;
+    std::string* reason = nullptr;
+  };
+
   boost::asio::ip::tcp::socket socket;
   std::string buffer;
-  bool busy = false;
-  std::deque<std::coroutine_handle<>> waiters;
+  bool write_busy = false;
+  std::deque<std::coroutine_handle<>> write_waiters;
   std::uint64_t next_sid = 1;
+  std::unordered_map<std::uint64_t, std::deque<message>> queues;
+  std::unordered_map<std::uint64_t, pending> waiters;
+  bool failed = false;
+  std::string fail_reason;
 
   explicit impl(boost::asio::ip::tcp::socket socket) : socket(std::move(socket)) {}
 
-  auto lock() -> boost::cobalt::task<void> {
-    if (!busy) {
-      busy = true;
+  auto enter() -> boost::cobalt::task<void> {
+    co_await boost::asio::dispatch(socket.get_executor(), boost::cobalt::use_op);
+  }
+
+  auto acquire_write() -> boost::cobalt::task<void> {
+    if (!write_busy) {
+      write_busy = true;
       co_return;
     }
     struct wait {
       impl* self = nullptr;
       bool await_ready() const noexcept { return false; }
-      void await_suspend(std::coroutine_handle<> handle) { self->waiters.push_back(handle); }
+      void await_suspend(std::coroutine_handle<> handle) { self->write_waiters.push_back(handle); }
       void await_resume() const noexcept {}
     };
     co_await wait{this};
   }
 
-  void unlock() {
-    if (waiters.empty()) {
-      busy = false;
+  void release_write() {
+    if (write_waiters.empty()) {
+      write_busy = false;
       return;
     }
-    auto handle = waiters.front();
-    waiters.pop_front();
+    auto handle = write_waiters.front();
+    write_waiters.pop_front();
     boost::asio::post(socket.get_executor(), [handle] { handle.resume(); });
+  }
+
+  auto write(std::string bytes) -> boost::cobalt::task<void> {
+    co_await enter();
+    co_await acquire_write();
+    try {
+      co_await boost::asio::async_write(socket, boost::asio::buffer(bytes), boost::cobalt::use_op);
+    } catch (...) {
+      release_write();
+      throw;
+    }
+    release_write();
   }
 
   auto read_line() -> boost::cobalt::task<std::string> {
@@ -97,11 +163,7 @@ struct client::impl {
     }
   }
 
-  auto write(std::string bytes) -> boost::cobalt::task<void> {
-    co_await boost::asio::async_write(socket, boost::asio::buffer(bytes), boost::cobalt::use_op);
-  }
-
-  auto next_message() -> boost::cobalt::task<std::string> {
+  auto read_incoming() -> boost::cobalt::task<inbound> {
     for (;;) {
       auto line = co_await read_line();
       if (line == "PING") {
@@ -115,26 +177,120 @@ struct client::impl {
         continue;
       }
 
-      std::size_t size = 0;
-      const auto last = line.rfind(' ');
-      if (last == std::string::npos) {
+      const bool headers = line.starts_with("HMSG ");
+      const auto parts = split(line);
+      if (parts.size() < 4) {
         throw error("malformed NATS message");
       }
-      size = static_cast<std::size_t>(std::stoul(line.substr(last + 1)));
-      co_await read_exact(size + 2);
-      auto payload = buffer.substr(0, size);
-      buffer.erase(0, size + 2);
 
-      if (line.starts_with("HMSG ")) {
-        const auto header_end = payload.find("\r\n\r\n");
+      inbound incoming;
+      incoming.message.subject = std::string(parts[1]);
+      incoming.sid = std::stoull(std::string(parts[2]));
+      const auto size = static_cast<std::size_t>(std::stoul(std::string(parts.back())));
+      if ((!headers && parts.size() == 5) || (headers && parts.size() == 6)) {
+        incoming.message.reply = std::string(parts[3]);
+      }
+
+      co_await read_exact(size + 2);
+      incoming.message.payload = buffer.substr(0, size);
+      buffer.erase(0, size + 2);
+      if (headers) {
+        const auto header_end = incoming.message.payload.find("\r\n\r\n");
         if (header_end != std::string::npos) {
-          payload.erase(0, header_end + 4);
+          incoming.message.payload.erase(0, header_end + 4);
         }
       }
-      co_return payload;
+      co_return incoming;
+    }
+  }
+
+  void deliver(inbound incoming) {
+    auto found = waiters.find(incoming.sid);
+    if (found != waiters.end()) {
+      *found->second.result = std::move(incoming.message);
+      auto handle = found->second.handle;
+      waiters.erase(found);
+      boost::asio::post(socket.get_executor(), [handle] { handle.resume(); });
+      return;
+    }
+    queues[incoming.sid].push_back(std::move(incoming.message));
+  }
+
+  void fail_waiters(std::string reason) {
+    failed = true;
+    fail_reason = std::move(reason);
+    std::vector<std::coroutine_handle<>> handles;
+    handles.reserve(waiters.size());
+    for (auto& [sid, waiter] : waiters) {
+      (void)sid;
+      *waiter.failed = true;
+      *waiter.reason = fail_reason;
+      handles.push_back(waiter.handle);
+    }
+    waiters.clear();
+    for (auto handle : handles) {
+      boost::asio::post(socket.get_executor(), [handle] { handle.resume(); });
+    }
+  }
+
+  auto receive(std::uint64_t sid) -> boost::cobalt::task<message> {
+    co_await enter();
+    if (auto queued = queues.find(sid); queued != queues.end() && !queued->second.empty()) {
+      auto message = std::move(queued->second.front());
+      queued->second.pop_front();
+      co_return message;
+    }
+    if (failed) {
+      throw error(fail_reason.empty() ? "connection closed" : fail_reason);
+    }
+
+    struct wait {
+      impl* self = nullptr;
+      std::uint64_t sid = 0;
+      message result;
+      bool failed = false;
+      std::string reason;
+      bool await_ready() const noexcept { return false; }
+      void await_suspend(std::coroutine_handle<> handle) {
+        self->waiters[sid] = pending{handle, &result, &failed, &reason};
+      }
+      void await_resume() const {
+        if (failed) {
+          throw error(reason.empty() ? "subscription closed" : reason);
+        }
+      }
+    };
+
+    wait operation{this, sid};
+    co_await operation;
+    co_return std::move(operation.result);
+  }
+
+  auto read_loop(std::shared_ptr<impl> self) -> boost::cobalt::task<void> {
+    try {
+      for (;;) {
+        auto incoming = co_await self->read_incoming();
+        self->deliver(std::move(incoming));
+      }
+    } catch (const std::exception& ex) {
+      self->fail_waiters(ex.what());
     }
   }
 };
+
+struct subscription::state {
+  std::shared_ptr<client::impl> connection;
+  std::uint64_t sid = 0;
+  bool open = false;
+};
+
+subscription::subscription(std::shared_ptr<state> state) : state_(std::move(state)) {}
+
+subscription::subscription(subscription&&) noexcept = default;
+
+auto subscription::operator=(subscription&&) noexcept -> subscription& = default;
+
+subscription::~subscription() = default;
 
 client::client(std::shared_ptr<impl> impl) : impl_(std::move(impl)) {}
 
@@ -143,7 +299,10 @@ auto connect(std::string url) -> boost::cobalt::task<client> {
   auto executor = co_await boost::cobalt::this_coro::executor;
   auto resolver = boost::asio::ip::tcp::resolver{executor};
   auto results = co_await resolver.async_resolve(where.host, where.port, boost::cobalt::use_op);
-  boost::asio::ip::tcp::socket socket{executor};
+
+  auto strand = boost::asio::make_strand(executor);
+  boost::asio::ip::tcp::socket socket{strand};
+  co_await boost::asio::dispatch(socket.get_executor(), boost::cobalt::use_op);
   co_await boost::asio::async_connect(socket, results, boost::cobalt::use_op);
 
   auto state = std::make_shared<client::impl>(std::move(socket));
@@ -169,6 +328,17 @@ auto connect(std::string url) -> boost::cobalt::task<client> {
     }
   }
 
+  boost::cobalt::spawn(state->socket.get_executor(), state->read_loop(state), [](std::exception_ptr exception) {
+    if (!exception) {
+      return;
+    }
+    try {
+      std::rethrow_exception(exception);
+    } catch (const std::exception& ex) {
+      spdlog::debug("nats read loop ended: {}", ex.what());
+    }
+  });
+
   co_return client{std::move(state)};
 }
 
@@ -176,14 +346,49 @@ auto client::publish(std::string subject, std::string payload) -> boost::cobalt:
   if (!impl_) {
     throw error("client is not connected");
   }
-  co_await impl_->lock();
-  try {
-    co_await impl_->write("PUB " + subject + " " + std::to_string(payload.size()) + "\r\n" + payload + "\r\n");
-  } catch (...) {
-    impl_->unlock();
-    throw;
+  require_subject(subject);
+  co_await impl_->write("PUB " + subject + " " + std::to_string(payload.size()) + "\r\n" + payload + "\r\n");
+}
+
+auto client::subscribe(std::string subject) -> boost::cobalt::task<subscription> {
+  if (!impl_) {
+    throw error("client is not connected");
   }
-  impl_->unlock();
+  require_subject(subject);
+  co_await impl_->enter();
+  const auto sid = impl_->next_sid++;
+  co_await impl_->write("SUB " + subject + " " + std::to_string(sid) + "\r\n");
+  auto state = std::make_shared<subscription::state>();
+  state->connection = impl_;
+  state->sid = sid;
+  state->open = true;
+  co_return subscription{std::move(state)};
+}
+
+auto subscription::next() -> boost::cobalt::task<message> {
+  if (!state_ || !state_->open || !state_->connection) {
+    throw error("subscription is closed");
+  }
+  co_return co_await state_->connection->receive(state_->sid);
+}
+
+auto subscription::unsubscribe() -> boost::cobalt::task<void> {
+  if (!state_ || !state_->open || !state_->connection) {
+    co_return;
+  }
+  state_->open = false;
+  auto connection = state_->connection;
+  const auto sid = state_->sid;
+  co_await connection->write("UNSUB " + std::to_string(sid) + "\r\n");
+  connection->queues.erase(sid);
+  if (auto waiter = connection->waiters.find(sid); waiter != connection->waiters.end()) {
+    *waiter->second.failed = true;
+    *waiter->second.reason = "subscription closed";
+    auto handle = waiter->second.handle;
+    connection->waiters.erase(waiter);
+    boost::asio::post(connection->socket.get_executor(), [handle] { handle.resume(); });
+  }
+  state_->connection.reset();
 }
 
 auto client::request(std::string subject, std::string payload) -> boost::cobalt::task<std::string> {
@@ -195,36 +400,31 @@ auto client::request(std::string subject, std::string payload,
   if (!impl_) {
     throw error("client is not connected");
   }
-  co_await impl_->lock();
-  try {
-    const auto sid = impl_->next_sid++;
-    const auto inbox = "_INBOX." + std::to_string(sid);
-    const auto id = std::to_string(sid);
-    std::string frame = "SUB " + inbox + " " + id + "\r\n";
-    if (headers.empty()) {
-      frame += "PUB " + subject + " " + inbox + " " + std::to_string(payload.size()) + "\r\n" + payload + "\r\n";
-    } else {
-      std::string block = "NATS/1.0\r\n";
-      for (const auto& [name, value] : headers) {
-        block += name;
-        block += ": ";
-        block += value;
-        block += "\r\n";
-      }
+  require_subject(subject);
+  co_await impl_->enter();
+  const auto sid = impl_->next_sid++;
+  const auto inbox = "_INBOX." + std::to_string(sid);
+  const auto id = std::to_string(sid);
+  std::string frame = "SUB " + inbox + " " + id + "\r\n";
+  if (headers.empty()) {
+    frame += "PUB " + subject + " " + inbox + " " + std::to_string(payload.size()) + "\r\n" + payload + "\r\n";
+  } else {
+    std::string block = "NATS/1.0\r\n";
+    for (const auto& [name, value] : headers) {
+      block += name;
+      block += ": ";
+      block += value;
       block += "\r\n";
-      const auto total = block.size() + payload.size();
-      frame += "HPUB " + subject + " " + inbox + " " + std::to_string(block.size()) + " " + std::to_string(total) +
-               "\r\n" + block + payload + "\r\n";
     }
-    frame += "UNSUB " + id + " 1\r\n";
-    co_await impl_->write(std::move(frame));
-    auto response = co_await impl_->next_message();
-    impl_->unlock();
-    co_return response;
-  } catch (...) {
-    impl_->unlock();
-    throw;
+    block += "\r\n";
+    const auto total = block.size() + payload.size();
+    frame += "HPUB " + subject + " " + inbox + " " + std::to_string(block.size()) + " " + std::to_string(total) +
+             "\r\n" + block + payload + "\r\n";
   }
+  frame += "UNSUB " + id + " 1\r\n";
+  co_await impl_->write(std::move(frame));
+  auto response = co_await impl_->receive(sid);
+  co_return std::move(response.payload);
 }
 
 }  // namespace async_nats

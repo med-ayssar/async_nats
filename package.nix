@@ -6,6 +6,9 @@
   boost,
   spdlog,
   libraries,
+  catch2_3,
+  withTests ? false,
+  buildType ? "Release",
 }:
 stdenv.mkDerivation {
   pname = "async_nats";
@@ -31,6 +34,9 @@ stdenv.mkDerivation {
   nativeBuildInputs = [
     cmake
     ninja
+  ]
+  ++ lib.optionals withTests [
+    catch2_3
   ];
 
   buildInputs = [
@@ -45,12 +51,25 @@ stdenv.mkDerivation {
   ]
   ++ builtins.attrValues libraries;
 
+  cmakeBuildType = buildType;
+
   cmakeFlags = [
     "-DCMAKE_CXX_STANDARD=23"
     "-DCMAKE_CXX_STANDARD_REQUIRED=ON"
     "-DCMAKE_CXX_EXTENSIONS=OFF"
     "-DASYNC_NATS_BUILD_SAMPLE=OFF"
+  ]
+  ++ lib.optionals withTests [
+    "-DBUILD_TESTS=ON"
   ];
+
+  doCheck = withTests;
+
+  checkPhase = ''
+    runHook preCheck
+    ctest --output-on-failure
+    runHook postCheck
+  '';
 
   meta = {
     description = "Async NATS client runtime. The library owns main and runs co_main.";
