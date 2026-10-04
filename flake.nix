@@ -23,7 +23,7 @@
         in
         {
           boost = pkgs.callPackage ./nix/boost-with-cobalt.nix {
-            boost = if sameStdenv then pkgs.boost else pkgs.boost.override { inherit stdenv; };
+            boost = if sameStdenv then pkgs.boost190 else pkgs.boost190.override { inherit stdenv; };
           };
           spdlog = if sameStdenv then pkgs.spdlog else pkgs.spdlog.override { inherit stdenv; };
         };

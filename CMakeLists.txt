@@ -15,7 +15,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release RelWithDebInfo "")
 
-find_package(Boost 1.84 REQUIRED CONFIG COMPONENTS cobalt)
+find_package(Boost 1.90 REQUIRED CONFIG COMPONENTS cobalt)
 find_package(spdlog REQUIRED)
 
 add_library(async_nats STATIC src/async_nats/main.cpp)

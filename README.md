@@ -14,7 +14,14 @@ async_nats::main co_main(int argc, char* argv[]) {
 
 The build uses Nix. C++ standard is 23. Choose Clang or GCC.
 
-Public dependencies come from nixpkgs (Boost, spdlog). Nixpkgs Boost does not ship Cobalt, so the flake builds that library into the same prefix. Private dependencies are declared in `libraries/default.nix` and pinned in `flake.nix` by branch (`?ref=`) or commit (`?rev=`). This project has no private dependencies yet.
+Public dependencies come from nixpkgs: Boost 1.90 and spdlog. Nixpkgs does not ship Cobalt, so the flake builds that library with C++23.
+
+Private dependencies go in `libraries/default.nix`. Pin each one in `flake.nix` by branch (`?ref=`) or commit (`?rev=`), then add it to the set. The set is empty until you declare one:
+
+```nix
+# libraries/default.nix
+my_lib = inputs.my_lib.packages.${system}.${compiler};
+```
 
 ## Requirements
 
@@ -62,4 +69,4 @@ find_package(async_nats REQUIRED)
 target_link_libraries(your_app PRIVATE Nats::async_nats)
 ```
 
-Boost and spdlog must be on the same prefix path. `nix develop` provides them. The package config calls `find_dependency` for both.
+Boost and spdlog must be on the same prefix path. `nix develop .#clang` provides them. The package config calls `find_dependency` for both. The installed library is static, and your program supplies `co_main`. The library supplies `main`.
