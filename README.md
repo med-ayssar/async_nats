@@ -3,14 +3,25 @@
 Static library that owns `main` and runs a user `co_main` on a Boost.Cobalt task. Link `Nats::async_nats` and define:
 
 ```cpp
-#include <async_nats/main.hpp>
+#include <async_nats.h>
 
 async_nats::main co_main(int argc, char* argv[]) {
+  auto client = co_await async_nats::connect("nats://127.0.0.1:4222");
+  auto js = co_await async_nats::jetstream::make(client);
+
+  auto kv = co_await js.create_key_value({.bucket = "store", .history = 10});
+  co_await kv.put("key", "value");
+  auto value = co_await kv.get("key");
+
+  auto objects = co_await js.create_object_store({.bucket = "files"});
+  co_await objects.put("file", "hello");
+  auto data = co_await objects.get("file");
+
   co_return 0;
 }
 ```
 
-`async_nats::main` is `boost::cobalt::task<int>`.
+`async_nats::main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. Include `async_nats.h` only.
 
 The build uses Nix. C++ standard is 23. Choose Clang or GCC.
 
@@ -41,7 +52,7 @@ Nix installs the package and links it at `./result`:
 
 ```text
 result/lib/libasync_nats.a
-result/include/async_nats/main.hpp
+result/include/async_nats.h
 result/lib/cmake/async_nats/
 ```
 

@@ -1,4 +1,4 @@
-#include <async_nats/main.hpp>
+#include <async_nats.h>
 
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>

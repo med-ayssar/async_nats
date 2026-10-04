@@ -18,7 +18,11 @@ set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release RelWithDebInfo "")
 find_package(Boost 1.90 REQUIRED CONFIG COMPONENTS cobalt)
 find_package(spdlog REQUIRED)
 
-add_library(async_nats STATIC src/async_nats/main.cpp)
+add_library(async_nats STATIC
+    src/async_nats/main.cpp
+    src/async_nats/client.cpp
+    src/async_nats/jetstream.cpp
+)
 add_library(Nats::async_nats ALIAS async_nats)
 
 set_target_properties(async_nats PROPERTIES
@@ -45,7 +49,7 @@ install(TARGETS async_nats
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(DIRECTORY src/async_nats/include/async_nats
+install(FILES src/async_nats/include/async_nats.h
     COMPONENT library
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )

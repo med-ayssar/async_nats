@@ -1,6 +1,129 @@
 #pragma once
+
 #include <boost/cobalt/task.hpp>
 
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
 namespace async_nats {
+
 using main = boost::cobalt::task<int>;
-}
+
+class error : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
+class client {
+ public:
+  client() = default;
+
+  auto publish(std::string subject, std::string payload) -> boost::cobalt::task<void>;
+  auto request(std::string subject, std::string payload) -> boost::cobalt::task<std::string>;
+  auto request(std::string subject, std::string payload,
+               std::vector<std::pair<std::string, std::string>> headers) -> boost::cobalt::task<std::string>;
+
+ private:
+  struct impl;
+  explicit client(std::shared_ptr<impl> impl);
+
+  std::shared_ptr<impl> impl_;
+
+  friend auto connect(std::string url) -> boost::cobalt::task<client>;
+};
+
+auto connect(std::string url) -> boost::cobalt::task<client>;
+
+namespace jetstream {
+
+class context;
+
+namespace kv {
+
+struct config {
+  std::string bucket;
+  std::int64_t history = 1;
+};
+
+struct entry {
+  std::string key;
+  std::string value;
+  std::uint64_t revision = 0;
+};
+
+class store {
+ public:
+  auto put(std::string key, std::string value) -> boost::cobalt::task<std::uint64_t>;
+  auto create(std::string key, std::string value) -> boost::cobalt::task<std::uint64_t>;
+  auto update(std::string key, std::string value, std::uint64_t revision) -> boost::cobalt::task<std::uint64_t>;
+  auto get(std::string key) -> boost::cobalt::task<std::optional<std::string>>;
+  auto entry(std::string key) -> boost::cobalt::task<std::optional<struct entry>>;
+  auto delete_(std::string key) -> boost::cobalt::task<void>;
+  auto purge(std::string key) -> boost::cobalt::task<void>;
+
+ private:
+  explicit store(client client, std::string bucket);
+  client client_;
+  std::string bucket_;
+
+  friend class async_nats::jetstream::context;
+};
+
+}  // namespace kv
+
+namespace object_store {
+
+struct config {
+  std::string bucket;
+};
+
+struct object_info {
+  std::string name;
+  std::uint64_t size = 0;
+  std::uint64_t chunks = 0;
+};
+
+class store {
+ public:
+  auto put(std::string name, std::string data) -> boost::cobalt::task<object_info>;
+  auto get(std::string name) -> boost::cobalt::task<std::string>;
+  auto info(std::string name) -> boost::cobalt::task<object_info>;
+  auto delete_(std::string name) -> boost::cobalt::task<void>;
+
+ private:
+  explicit store(client client, std::string bucket);
+  client client_;
+  std::string bucket_;
+
+  friend class async_nats::jetstream::context;
+};
+
+}  // namespace object_store
+
+class context {
+ public:
+  auto create_key_value(kv::config config) -> boost::cobalt::task<kv::store>;
+  auto get_key_value(std::string bucket) -> boost::cobalt::task<kv::store>;
+  auto create_object_store(object_store::config config) -> boost::cobalt::task<object_store::store>;
+  auto get_object_store(std::string bucket) -> boost::cobalt::task<object_store::store>;
+
+ private:
+  explicit context(client client);
+  client client_;
+
+  friend auto make(client client) -> boost::cobalt::task<context>;
+};
+
+auto make(client client) -> boost::cobalt::task<context>;
+
+}  // namespace jetstream
+
+}  // namespace async_nats
+
+auto co_main(int argc, char** argv) -> async_nats::main;
