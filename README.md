@@ -25,7 +25,7 @@ my_lib = inputs.my_lib.packages.${system}.${compiler};
 
 ## Requirements
 
-- Nix 2.35 or newer, with flakes available. `./build.sh` passes the flakes feature itself.
+- Nix 2.35 or newer. Flakes are enabled in `~/.config/nix/nix.conf`.
 
 ## Build and install
 

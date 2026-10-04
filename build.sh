@@ -34,7 +34,7 @@ done
 
 cd "${SCRIPT_DIR}"
 
-nix --extra-experimental-features 'nix-command flakes' build ".#${COMPILER}" -o result
+nix build ".#${COMPILER}" -o result
 
 echo "Installed package: ${SCRIPT_DIR}/result"
 echo "Library:           ${SCRIPT_DIR}/result/lib/libasync_nats.a"
