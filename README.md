@@ -42,6 +42,17 @@ co_await client.publish("async_nats.example", "hello");
 auto message = co_await subscription.next();
 ```
 
+`subscribe` also accepts a list of routes. Each route is a subject and a handler. A message on that subject starts the handler. `unsubscribe` takes the subjects to remove.
+
+```cpp
+co_await client.subscribe({
+    {"Grok", [](async_nats::message message) -> boost::cobalt::task<void> {
+       co_return;
+     }},
+});
+co_await client.unsubscribe({"Grok"});
+```
+
 The build uses Nix. C++ standard is 23. Choose Clang or GCC.
 
 Public dependencies come from nixpkgs: Boost 1.90 and spdlog. Nixpkgs does not ship Cobalt, so `overlays.default` builds that library with C++23 and replaces `pkgs.boost190`.

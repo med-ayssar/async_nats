@@ -93,6 +93,8 @@ struct client::impl {
   std::uint64_t next_sid = 1;
   std::unordered_map<std::uint64_t, std::deque<message>> queues;
   std::unordered_map<std::uint64_t, pending> waiters;
+  std::unordered_map<std::uint64_t, message_handler> handlers;
+  std::unordered_map<std::string, std::vector<std::uint64_t>> routes;
   bool failed = false;
   std::string fail_reason;
 
@@ -204,7 +206,37 @@ struct client::impl {
     }
   }
 
+  void forget_route(std::uint64_t sid, const std::string& subject) {
+    handlers.erase(sid);
+    auto found = routes.find(subject);
+    if (found == routes.end()) {
+      return;
+    }
+    std::erase(found->second, sid);
+    if (found->second.empty()) {
+      routes.erase(found);
+    }
+  }
+
   void deliver(inbound incoming) {
+    if (auto route = handlers.find(incoming.sid); route != handlers.end()) {
+      try {
+        auto handled = route->second(std::move(incoming.message));
+        boost::cobalt::spawn(socket.get_executor(), std::move(handled), [](std::exception_ptr exception) {
+          if (!exception) {
+            return;
+          }
+          try {
+            std::rethrow_exception(exception);
+          } catch (const std::exception& ex) {
+            spdlog::error("nats handler failed: {}", ex.what());
+          }
+        });
+      } catch (const std::exception& ex) {
+        spdlog::error("nats handler failed: {}", ex.what());
+      }
+      return;
+    }
     auto found = waiters.find(incoming.sid);
     if (found != waiters.end()) {
       *found->second.result = std::move(incoming.message);
@@ -363,6 +395,77 @@ auto client::subscribe(std::string subject) -> boost::cobalt::task<subscription>
   state->sid = sid;
   state->open = true;
   co_return subscription{std::move(state)};
+}
+
+auto client::subscribe(std::vector<route> routes) -> boost::cobalt::task<void> {
+  if (!impl_) {
+    throw error("client is not connected");
+  }
+  for (const auto& route : routes) {
+    require_subject(route.subject);
+    if (!route.handler) {
+      throw error("invalid handler");
+    }
+  }
+  if (routes.empty()) {
+    co_return;
+  }
+
+  co_await impl_->enter();
+  std::string frame;
+  std::vector<std::pair<std::uint64_t, std::string>> added;
+  added.reserve(routes.size());
+  for (auto& route : routes) {
+    const auto sid = impl_->next_sid++;
+    frame += "SUB " + route.subject + " " + std::to_string(sid) + "\r\n";
+    impl_->routes[route.subject].push_back(sid);
+    impl_->handlers.emplace(sid, std::move(route.handler));
+    added.emplace_back(sid, route.subject);
+  }
+  try {
+    co_await impl_->write(std::move(frame));
+  } catch (...) {
+    for (const auto& [sid, subject] : added) {
+      impl_->forget_route(sid, subject);
+    }
+    throw;
+  }
+}
+
+auto client::unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void> {
+  if (!impl_) {
+    throw error("client is not connected");
+  }
+  for (const auto& subject : subjects) {
+    require_subject(subject);
+  }
+  if (subjects.empty()) {
+    co_return;
+  }
+
+  co_await impl_->enter();
+  std::string frame;
+  std::vector<std::pair<std::string, std::vector<std::uint64_t>>> closing;
+  for (const auto& subject : subjects) {
+    auto found = impl_->routes.find(subject);
+    if (found == impl_->routes.end()) {
+      continue;
+    }
+    for (const auto sid : found->second) {
+      frame += "UNSUB " + std::to_string(sid) + "\r\n";
+    }
+    closing.emplace_back(subject, found->second);
+  }
+  if (!frame.empty()) {
+    co_await impl_->write(std::move(frame));
+  }
+  for (const auto& [subject, sids] : closing) {
+    for (const auto sid : sids) {
+      impl_->handlers.erase(sid);
+      impl_->queues.erase(sid);
+    }
+    impl_->routes.erase(subject);
+  }
 }
 
 auto subscription::next() -> boost::cobalt::task<message> {

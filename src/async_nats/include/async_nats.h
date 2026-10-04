@@ -3,6 +3,7 @@
 #include <boost/cobalt/task.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -26,6 +27,13 @@ struct message {
   std::string subject;
   std::string payload;
   std::optional<std::string> reply;
+};
+
+using message_handler = std::function<boost::cobalt::task<void>(message)>;
+
+struct route {
+  std::string subject;
+  message_handler handler;
 };
 
 class subscription {
@@ -54,6 +62,8 @@ class client {
 
   auto publish(std::string subject, std::string payload) -> boost::cobalt::task<void>;
   auto subscribe(std::string subject) -> boost::cobalt::task<subscription>;
+  auto subscribe(std::vector<route> routes) -> boost::cobalt::task<void>;
+  auto unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void>;
   auto request(std::string subject, std::string payload) -> boost::cobalt::task<std::string>;
   auto request(std::string subject, std::string payload,
                std::vector<std::pair<std::string, std::string>> headers) -> boost::cobalt::task<std::string>;
