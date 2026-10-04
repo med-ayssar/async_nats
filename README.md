@@ -12,48 +12,49 @@ async_nats::main co_main(int argc, char* argv[]) {
 
 `async_nats::main` is `boost::cobalt::task<int>`.
 
+The build uses Nix. C++ standard is 23. Choose Clang or GCC.
+
+Public dependencies come from nixpkgs (Boost, spdlog). Nixpkgs Boost does not ship Cobalt, so the flake builds that library into the same prefix. Private dependencies are declared in `libraries/default.nix` and pinned in `flake.nix` by branch (`?ref=`) or commit (`?rev=`). This project has no private dependencies yet.
+
 ## Requirements
 
-- CMake 3.20 or newer
-- Ninja
-- Conan 2
-- A C++23 compiler. The default Conan profile uses Homebrew LLVM Clang with libc++.
-
-Dependencies installed by Conan: Boost 1.90 (Cobalt) and spdlog 1.17.
+- Nix 2.35 or newer, with flakes available. `./build.sh` passes the flakes feature itself.
 
 ## Build and install
 
 From this directory:
 
 ```bash
-./build.sh
+./build.sh            # Clang, C++23
+./build.sh --clang
+./build.sh --gcc
 ```
 
-That configures a Debug Ninja build, builds the `async_nats` target, and installs the `library` component into `./install`.
-
-```bash
-./build.sh -p /opt/async_nats   # install prefix
-./build.sh -f                  # delete ./build before configuring
-./build.sh -h
-```
-
-Installed layout:
+Nix installs the package and links it at `./result`:
 
 ```text
-install/lib/libasync_nats.a
-install/include/async_nats/main.hpp
-install/lib/cmake/async_nats/
+result/lib/libasync_nats.a
+result/include/async_nats/main.hpp
+result/lib/cmake/async_nats/
 ```
+
+The same packages are `nix build .#clang` and `nix build .#gcc`.
+
+A development shell with the matching compiler, CMake, Ninja, Boost, and spdlog:
+
+```bash
+nix develop .#clang
+nix develop .#gcc
+```
+
+Inside the shell, `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug` uses C++23 because the project sets `CMAKE_CXX_STANDARD` to 23.
 
 ## Use the installed package
 
-The package calls `find_dependency` for Boost (component `cobalt`) and spdlog, so those packages must be visible to CMake. Point it at this install prefix and at the Conan generators from `./build.sh`:
-
 ```bash
 cmake -S your_app -B build -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=/path/to/async_nats/build/Release/generators/conan_toolchain.cmake \
-  -DCMAKE_PREFIX_PATH=/path/to/async_nats/install \
-  -DCMAKE_BUILD_TYPE=Debug
+  -DCMAKE_PREFIX_PATH=/path/to/async_nats/result \
+  -DCMAKE_BUILD_TYPE=Release
 ```
 
 ```cmake
@@ -61,4 +62,4 @@ find_package(async_nats REQUIRED)
 target_link_libraries(your_app PRIVATE Nats::async_nats)
 ```
 
-Building this repository on its own also configures the sample executable `async_app`. `./build.sh` does not build or install that sample. It installs only the library component.
+Boost and spdlog must be on the same prefix path. `nix develop` provides them. The package config calls `find_dependency` for both.

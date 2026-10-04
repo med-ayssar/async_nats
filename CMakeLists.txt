@@ -26,7 +26,7 @@ set_target_properties(async_nats PROPERTIES
     OUTPUT_NAME async_nats
 )
 
-target_compile_features(async_nats PUBLIC cxx_std_20)
+target_compile_features(async_nats PUBLIC cxx_std_23)
 
 target_include_directories(async_nats PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/include>
@@ -76,10 +76,13 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/async_nats
 )
 
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+# The sample's entry point is boost::cobalt::main. A shared Cobalt library
+# does not provide the process entry point, so the Nix package turns this off.
+option(ASYNC_NATS_BUILD_SAMPLE "Build the cobalt channel sample" ON)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND ASYNC_NATS_BUILD_SAMPLE)
     add_executable(async_app src/main4.cpp)
     target_link_libraries(async_app PRIVATE Boost::cobalt)
-    target_compile_features(async_app PRIVATE cxx_std_20)
+    target_compile_features(async_app PRIVATE cxx_std_23)
     target_include_directories(async_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     install(TARGETS async_app RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()

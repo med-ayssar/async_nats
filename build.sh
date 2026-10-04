@@ -2,25 +2,24 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="${SCRIPT_DIR}/install"
-FRESH_BUILD=false
+COMPILER="clang"
 
 usage() {
-  echo "Usage: $0 [-p|--path <install_path>] [-f|--fresh]"
-  echo "  Build and install the async_nats library."
-  echo "  -p, --path   Installation directory (default: ./install)"
-  echo "  -f, --fresh  Remove ./build before configuring"
+  echo "Usage: $0 [--clang|--gcc]"
+  echo "  Build and install async_nats with Nix. C++23."
+  echo "  --clang  Clang (default)"
+  echo "  --gcc    GCC"
   exit 1
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  -p | --path)
-    INSTALL_DIR="$2"
-    shift 2
+  --clang)
+    COMPILER="clang"
+    shift
     ;;
-  -f | --fresh)
-    FRESH_BUILD=true
+  --gcc)
+    COMPILER="gcc"
     shift
     ;;
   -h | --help)
@@ -35,27 +34,8 @@ done
 
 cd "${SCRIPT_DIR}"
 
-if [ "${FRESH_BUILD}" = true ]; then
-  rm -rf build
-fi
+nix --extra-experimental-features 'nix-command flakes' build ".#${COMPILER}" -o result
 
-echo "[1/4] Conan dependencies..."
-conan install . --build=missing
-
-echo "[2/4] Configure..."
-cmake -B build/Debug -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/build/Release/generators/conan_toolchain.cmake" \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}"
-
-ln -sfn build/Debug/compile_commands.json compile_commands.json
-
-echo "[3/4] Build async_nats..."
-cmake --build build/Debug --target async_nats
-
-echo "[4/4] Install to ${INSTALL_DIR}..."
-cmake --install build/Debug --component library
-
-echo "Installed library: ${INSTALL_DIR}/lib/libasync_nats.a"
-echo "CMake package:    ${INSTALL_DIR}/lib/cmake/async_nats/"
+echo "Installed package: ${SCRIPT_DIR}/result"
+echo "Library:           ${SCRIPT_DIR}/result/lib/libasync_nats.a"
+echo "CMake package:     ${SCRIPT_DIR}/result/lib/cmake/async_nats/"
