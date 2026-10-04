@@ -42,6 +42,16 @@ co_await client.publish("async_nats.example", "hello");
 auto message = co_await subscription.next();
 ```
 
+`connect` throws `async_nats::error` when the server cannot be reached. A later dropped connection completes `closed()` with `error_kind::interrupted`. Both are logged. `error::kind()` is `unreachable`, `interrupted`, `closed`, `signal`, or `other`.
+
+The library handles `SIGINT` and `SIGTERM`. It closes every client, logs the signal, then runs the handler registered with `on_error`. That handler receives the `error` so the application can do extra work. `SIGKILL` cannot be handled. Call `on_error` before the first `co_await` in `co_main`.
+
+```cpp
+async_nats::on_error([](async_nats::error failure) -> boost::cobalt::task<void> {
+  co_return;
+});
+```
+
 `subscribe` also accepts a list of routes. Each route is a subject and a handler. A message on that subject starts the handler. `unsubscribe` takes the subjects to remove.
 
 ```cpp

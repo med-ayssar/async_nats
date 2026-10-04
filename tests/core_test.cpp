@@ -1,13 +1,18 @@
+#include <async_nats.h>
 #include <async_nats/core.h>
 
 #include "thread_count.hpp"
 
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/cobalt/spawn.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <cstdlib>
 #include <future>
+#include <optional>
 #include <string>
 #include <thread>
 
@@ -61,4 +66,59 @@ TEST_CASE("core is a singleton with one io thread and the worker pool") {
   boost::asio::post(first.thread_pool(), [&done] { done.set_value(7); });
   REQUIRE(result.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
   REQUIRE(result.get() == 7);
+}
+
+TEST_CASE("connect reports a server that is not reachable") {
+  boost::asio::io_context io;
+  std::optional<async_nats::error_kind> kind;
+  bool handler_ran = false;
+
+  async_nats::on_error([&](async_nats::error failure) -> boost::cobalt::task<void> {
+    handler_ran = true;
+    kind = failure.kind();
+    co_return;
+  });
+
+  boost::cobalt::spawn(io, async_nats::connect("nats://127.0.0.1:1"),
+                       [&](std::exception_ptr exception, async_nats::client) {
+                         REQUIRE(exception != nullptr);
+                         try {
+                           std::rethrow_exception(exception);
+                         } catch (const async_nats::error& failure) {
+                           REQUIRE(failure.kind() == async_nats::error_kind::unreachable);
+                           REQUIRE(std::string(failure.what()).find("is not reachable") != std::string::npos);
+                         }
+                       });
+  io.run();
+  REQUIRE(handler_ran);
+  REQUIRE(kind == async_nats::error_kind::unreachable);
+  async_nats::on_error({});
+}
+
+TEST_CASE("connect reports a server that drops the connection") {
+  boost::asio::io_context io;
+  boost::asio::ip::tcp::acceptor acceptor{io, {boost::asio::ip::tcp::v4(), 0}};
+  const auto port = std::to_string(acceptor.local_endpoint().port());
+  boost::asio::ip::tcp::socket accepted{io};
+  acceptor.async_accept(accepted, [&](const boost::system::error_code&) { accepted.close(); });
+
+  std::optional<async_nats::error_kind> kind;
+  async_nats::on_error([&](async_nats::error failure) -> boost::cobalt::task<void> {
+    kind = failure.kind();
+    co_return;
+  });
+
+  boost::cobalt::spawn(io, async_nats::connect("nats://127.0.0.1:" + port),
+                       [&](std::exception_ptr exception, async_nats::client) {
+                         REQUIRE(exception != nullptr);
+                         try {
+                           std::rethrow_exception(exception);
+                         } catch (const async_nats::error& failure) {
+                           REQUIRE(failure.kind() == async_nats::error_kind::interrupted);
+                           REQUIRE(std::string(failure.what()).find("was interrupted") != std::string::npos);
+                         }
+                       });
+  io.run();
+  REQUIRE(kind == async_nats::error_kind::interrupted);
+  async_nats::on_error({});
 }

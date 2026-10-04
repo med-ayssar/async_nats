@@ -16,10 +16,31 @@ namespace async_nats {
 
 using main = boost::cobalt::task<int>;
 
+enum class error_kind {
+  unreachable,
+  interrupted,
+  closed,
+  signal,
+  other,
+};
+
 class error : public std::runtime_error {
  public:
-  using std::runtime_error::runtime_error;
+  explicit error(std::string message, error_kind kind = error_kind::other)
+      : std::runtime_error(std::move(message)), kind_(kind) {}
+
+  auto kind() const noexcept -> error_kind { return kind_; }
+
+ private:
+  error_kind kind_;
 };
+
+// Runs after the library has logged a connection failure or a SIGINT/SIGTERM.
+// On a signal the clients are already closed. The handler can do extra work
+// and then return. `error::kind()` says which of those happened.
+using error_handler = std::function<boost::cobalt::task<void>(error)>;
+
+void on_error(error_handler handler);
 
 class client;
 
@@ -78,6 +99,11 @@ class client {
 
   friend struct subscription::state;
   friend auto connect(std::string url) -> boost::cobalt::task<client>;
+  friend void on_error(error_handler handler);
+  friend auto report_error(const error& failure) -> boost::cobalt::task<void>;
+  friend auto close_all_clients(const error& failure) -> boost::cobalt::task<void>;
+  friend void request_stop();
+  friend auto stop_requested() -> bool;
 };
 
 auto connect(std::string url) -> boost::cobalt::task<client>;
