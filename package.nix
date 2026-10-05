@@ -8,7 +8,7 @@
   libraries,
   catch2_3,
   withTests ? false,
-  buildType ? "Release",
+  buildType ? "Debug",
 }:
 stdenv.mkDerivation {
   pname = "AsyncNats";
@@ -52,6 +52,9 @@ stdenv.mkDerivation {
   ++ builtins.attrValues libraries;
 
   cmakeBuildType = buildType;
+
+  # Keep the debug symbols in the static archive so an app can step into the library.
+  dontStrip = buildType == "Debug";
 
   cmakeFlags = [
     "-DCMAKE_CXX_STANDARD=23"

@@ -83,10 +83,11 @@ my_lib = inputs.my_lib.packages.${system}.${compiler};
 From this directory:
 
 ```bash
-./build.sh            # async-nats-clang-release, plus compile_commands.json
-./build.sh --gcc --debug
-./install.sh          # async-nats-clang-release into the Nix profile
-./install.sh --clang --debug
+./build.sh            # Clang Debug, plus compile_commands.json
+./build.sh --gcc
+./build.sh --release  # Clang Release
+./install.sh          # Clang Debug into the Nix profile
+./install.sh --gcc --release
 ```
 
 The flake packages are the four compiler and build-type combinations:
@@ -98,7 +99,13 @@ nix build .#async-nats-gcc-release
 nix build .#async-nats-gcc-debug
 ```
 
-`default`, `clang`, and `gcc` are the Release packages. `async-nats-tests` is the Clang Release library with `-DBUILD_TESTS=ON`. `nix build .#tests` is the same derivation.
+`nix build` with no attribute is Clang Debug (`async-nats-clang-debug`). `clang` and `gcc` stay the Release packages. `async-nats-tests` is the Clang Release library with `-DBUILD_TESTS=ON`. `nix build .#tests` is the same derivation.
+
+Another flake includes one of those packages. Release is `async-nats-${compiler}-release`, also published as `clang` or `gcc`. Debug is `async-nats-${compiler}-debug`, and that archive keeps its debug symbols:
+
+```nix
+async_nats = inputs.async_nats.packages.${system}."async-nats-${compiler}-debug";
+```
 
 Nix installs the package and links it at `./result`:
 

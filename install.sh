@@ -3,15 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPILER="clang"
-BUILD_TYPE="release"
+BUILD_TYPE="debug"
 
 usage() {
   echo "Usage: $0 [--clang|--gcc] [--debug|--release]"
   echo "  Install AsyncNats into the Nix profile."
   echo "  --clang    Clang (default)"
   echo "  --gcc      GCC"
-  echo "  --release  Release (default)"
-  echo "  --debug    Debug"
+  echo "  --debug    Debug (default)"
+  echo "  --release  Release"
   exit 1
 }
 

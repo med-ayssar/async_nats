@@ -85,6 +85,7 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
+        clangDebug = packageFor system "clang" "debug" false;
         clangRelease = packageFor system "clang" "release" false;
         gccRelease = packageFor system "gcc" "release" false;
         tests = packageFor system "clang" "release" true;
@@ -93,10 +94,10 @@
       in
       {
         packages = {
-          default = clangRelease;
+          default = clangDebug;
           doc = doc;
           "async-nats-clang-release" = clangRelease;
-          "async-nats-clang-debug" = packageFor system "clang" "debug" false;
+          "async-nats-clang-debug" = clangDebug;
           "async-nats-gcc-release" = gccRelease;
           "async-nats-gcc-debug" = packageFor system "gcc" "debug" false;
           "async-nats-tests" = tests;
