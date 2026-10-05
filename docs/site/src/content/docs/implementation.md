@@ -1,6 +1,9 @@
-# How AsyncNats works
+---
+title: Core implementation overview
+description: How the runtime, the socket, signals, and the Nix package functions are implemented.
+---
 
-This note is for reading the implementation later. The same text is the Astro page [Core implementation overview](../docs/site/src/content/docs/implementation.md). The shorter public walkthrough is `docs/flow.md`. This file follows the same path further into the source, then explains `packageFor` and `shellFor` in `flake.nix` and the matching functions in the docktopus flake.
+This page follows the implementation: what is compiled, the two executors, connect, the read loop, subscriptions, errors, signals, and `packageFor` / `shellFor`. The same text is `internal/doc.md` in the repository. The shorter walkthrough is [How it runs](/runtime/).
 
 The library owns process `main`. An application defines `coMain` and links `AsyncNats::AsyncNats`. `AsyncNats::Main` is `boost::cobalt::task<int>`. The public client header is `<AsyncNats.h>`. The runtime header is `<AsyncNats/Core.h>`.
 

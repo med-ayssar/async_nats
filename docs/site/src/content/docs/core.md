@@ -28,4 +28,4 @@ Socket operations are not thread-safe, and they are not exposed on `Core`. Post 
 
 `ioContext()`, `release()`, and `join()` are private. `EventLoop` is the only friend. The header is not a place to run the socket.
 
-The implementation is `src/async_nats/core/core.cpp`. The pool size parser is `src/async_nats/utils/thread_count.hpp`.
+The implementation is `src/async_nats/core/core.cpp`. The pool size parser is `src/async_nats/utils/thread_count.hpp`. [Core implementation overview](/implementation/) follows that code, the signal path, and the Nix package functions.

@@ -23,6 +23,7 @@ The client API is `<AsyncNats.h>`. The runtime is `<AsyncNats/Core.h>`, class `C
 | --- | --- |
 | [How it runs](/runtime/) | Startup, the read loop, and how a subscription waits |
 | [Core](/core/) | `Core::instance()`, the IO thread, and the worker pool |
+| [Core implementation overview](/implementation/) | The runtime, signals, and `packageFor` / `shellFor` |
 | [Client](/client/) | Connect, publish, subscribe, request, close |
 | [Errors and signals](/errors/) | `ErrorKind`, `onError`, `SIGINT`, and `SIGTERM` |
 | [JetStream](/jetstream/) | Key-value and the object store |
