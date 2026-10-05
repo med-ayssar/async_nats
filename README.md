@@ -109,7 +109,7 @@ result/include/async_nats/core.h
 result/lib/cmake/async_nats/
 ```
 
-`./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. CMake writes that file because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides Boost and spdlog in its implicit include path, and CMake leaves those paths out of the database. The script writes them back as `-isystem` flags so Homebrew `clangd` can see them without running the Nix compiler. `nix build` alone keeps its database inside the sandbox.
+`./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. CMake writes that file because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides Boost and spdlog in its own search path, and CMake leaves those paths out of the database. `source env/main.zsh` sets `CLANGXX` to that Nix `clang++` and exports `NIX_CFLAGS_COMPILE` from the same shell. Neovim passes `CLANGXX` to clangd as `--query-driver`, so clangd runs the compiler. The compiler reads `NIX_CFLAGS_COMPILE` and reports Boost and spdlog. With `CLANGXX` unset, Neovim uses Homebrew `clang++`. Start Neovim from the shell where you sourced the file. `nix build` alone keeps its database inside the sandbox.
 
 A development shell with the matching compiler, CMake, Ninja, Boost, and spdlog:
 
