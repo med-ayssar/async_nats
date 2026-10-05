@@ -7,4 +7,11 @@ find_dependency(spdlog REQUIRED)
 
 include("${CMAKE_CURRENT_LIST_DIR}/AsyncNatsTargets.cmake")
 
+# A Debug install ships the library sources and a compile database whose
+# paths name those sources. A Release install has neither file.
+if(EXISTS "${PACKAGE_PREFIX_DIR}/compile_commands.json")
+  set(AsyncNats_SOURCE_DIR "${PACKAGE_PREFIX_DIR}")
+  set(AsyncNats_COMPILE_COMMANDS "${PACKAGE_PREFIX_DIR}/compile_commands.json")
+endif()
+
 check_required_components(AsyncNats)
