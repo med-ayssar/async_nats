@@ -47,9 +47,17 @@ cd "${SCRIPT_DIR}"
 
 nix build ".#async-nats-${COMPILER}-${BUILD_TYPE}" -o result
 
+echo "Installed package: ${SCRIPT_DIR}/result"
+echo "Library:           ${SCRIPT_DIR}/result/lib/libAsyncNats.a"
+echo "CMake package:     ${SCRIPT_DIR}/result/lib/cmake/AsyncNats/"
+
+if [[ "${BUILD_TYPE}" != "debug" ]]; then
+  exit 0
+fi
+
 # The Nix build runs in a sandbox, so its compile database points at that
-# temporary tree. Configure the real source tree with the same compiler and
-# leave compile_commands.json where clangd looks for it.
+# temporary tree. A debug build configures this checkout and leaves
+# compile_commands.json where clangd looks for it.
 BUILD_DIR="${SCRIPT_DIR}/build/${COMPILER}"
 nix develop ".#async-nats-${COMPILER}" -c cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
@@ -59,8 +67,4 @@ nix develop ".#async-nats-${COMPILER}" -c cmake -S "${SCRIPT_DIR}" -B "${BUILD_D
 # clangd learns them by running that compiler. source env/main.zsh sets CLANGXX
 # to the compiler path, and Neovim passes it to clangd as --query-driver.
 ln -sfn "build/${COMPILER}/compile_commands.json" "${SCRIPT_DIR}/compile_commands.json"
-
-echo "Installed package: ${SCRIPT_DIR}/result"
-echo "Library:           ${SCRIPT_DIR}/result/lib/libAsyncNats.a"
-echo "CMake package:     ${SCRIPT_DIR}/result/lib/cmake/AsyncNats/"
 echo "Compile commands:  ${SCRIPT_DIR}/compile_commands.json"

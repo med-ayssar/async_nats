@@ -116,9 +116,7 @@ result/include/AsyncNats/Core.h
 result/lib/cmake/AsyncNats/
 ```
 
-A Debug package also installs `result/src/` and `result/compile_commands.json`. The database lists the library `.cpp` files, and every source path points into `result/src`. `find_package(AsyncNats)` sets `AsyncNats_SOURCE_DIR` and `AsyncNats_COMPILE_COMMANDS` when that file is present. Another app puts `AsyncNats_SOURCE_DIR` headers first and appends `AsyncNats_COMPILE_COMMANDS`, so clangd opens the function body from the same package it links. A Release package does not install those files.
-
-`./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. CMake writes that file because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides Boost and spdlog in its own search path, and CMake leaves those paths out of the database. `source env/main.zsh` sets `CLANGXX` to that Nix `clang++` and exports `NIX_CFLAGS_COMPILE` from the same shell. Neovim keeps Homebrew `clangd` as the language server. When `CLANGXX` is set, it passes that compiler as `--query-driver`, so clangd runs it and the compiler reports Boost and spdlog. Start Neovim from the shell where you sourced the file.
+A debug `./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. `./build.sh --release` does not write that file. CMake writes it because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides Boost and spdlog in its own search path, and CMake leaves those paths out of the database. `source env/main.zsh` sets `CLANGXX` to that Nix `clang++` and exports `NIX_CFLAGS_COMPILE` from the same shell. Neovim keeps Homebrew `clangd` as the language server. When `CLANGXX` is set, it passes that compiler as `--query-driver`, so clangd runs it and the compiler reports Boost and spdlog. Start Neovim from the shell where you sourced the file. The installed package does not contain `compile_commands.json`.
 
 A development shell with the matching compiler, CMake, Ninja, Boost, and spdlog:
 
