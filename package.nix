@@ -11,7 +11,7 @@
   buildType ? "Release",
 }:
 stdenv.mkDerivation {
-  pname = "async_nats";
+  pname = "AsyncNats";
   version = "0.1.0";
 
   src = lib.cleanSourceWith {
@@ -71,7 +71,7 @@ stdenv.mkDerivation {
   '';
 
   meta = {
-    description = "Async NATS client runtime. The library owns main and runs co_main.";
+    description = "Async NATS client runtime. The library owns main and runs coMain.";
     license = lib.licenses.mit;
   };
 }

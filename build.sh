@@ -7,7 +7,7 @@ BUILD_TYPE="release"
 
 usage() {
   echo "Usage: $0 [--clang|--gcc] [--debug|--release]"
-  echo "  Build async_nats with Nix. C++23."
+  echo "  Build AsyncNats with Nix. C++23."
   echo "  --clang    Clang (default)"
   echo "  --gcc      GCC"
   echo "  --release  Release (default)"
@@ -61,6 +61,6 @@ nix develop ".#async-nats-${COMPILER}" -c cmake -S "${SCRIPT_DIR}" -B "${BUILD_D
 ln -sfn "build/${COMPILER}/compile_commands.json" "${SCRIPT_DIR}/compile_commands.json"
 
 echo "Installed package: ${SCRIPT_DIR}/result"
-echo "Library:           ${SCRIPT_DIR}/result/lib/libasync_nats.a"
-echo "CMake package:     ${SCRIPT_DIR}/result/lib/cmake/async_nats/"
+echo "Library:           ${SCRIPT_DIR}/result/lib/libAsyncNats.a"
+echo "CMake package:     ${SCRIPT_DIR}/result/lib/cmake/AsyncNats/"
 echo "Compile commands:  ${SCRIPT_DIR}/compile_commands.json"

@@ -7,7 +7,7 @@ BUILD_TYPE="release"
 
 usage() {
   echo "Usage: $0 [--clang|--gcc] [--debug|--release]"
-  echo "  Install async_nats into the Nix profile."
+  echo "  Install AsyncNats into the Nix profile."
   echo "  --clang    Clang (default)"
   echo "  --gcc      GCC"
   echo "  --release  Release (default)"
@@ -50,5 +50,5 @@ nix profile add "${SCRIPT_DIR}/result"
 
 echo "${BUILD_TYPE} library installed."
 echo "Store output: ${SCRIPT_DIR}/result"
-echo "Profile:      ${HOME}/.nix-profile/lib/libasync_nats.a"
-echo "Headers:      ${HOME}/.nix-profile/include/async_nats.h"
+echo "Profile:      ${HOME}/.nix-profile/lib/libAsyncNats.a"
+echo "Headers:      ${HOME}/.nix-profile/include/AsyncNats.h"

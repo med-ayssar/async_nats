@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    project(async_nats VERSION 0.1.0 LANGUAGES CXX)
+    project(AsyncNats VERSION 0.1.0 LANGUAGES CXX)
 endif()
 
 include(GNUInstallDirs)
@@ -19,100 +19,119 @@ find_package(Boost 1.90 REQUIRED CONFIG COMPONENTS cobalt)
 find_package(spdlog REQUIRED)
 find_package(Threads REQUIRED)
 
-add_library(async_nats_objects OBJECT
-    src/async_nats/client.cpp
-    src/async_nats/jetstream.cpp
-    src/async_nats/core.cpp
+# Listed explicitly. src/async_nats/core/client and core/error are the unused
+# cnats tree and must stay out of the build. The event loop is
+# src/async_nats/core/event_loop.cpp.
+set(ASYNC_NATS_CLIENT_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/client/include)
+set(ASYNC_NATS_CORE_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/core/include)
+
+add_library(AsyncNatsObjects OBJECT
+    src/async_nats/client/client.cpp
+    src/async_nats/client/jetstream.cpp
+    src/async_nats/core/core.cpp
+    src/async_nats/utils/thread_count.cpp
 )
-target_compile_features(async_nats_objects PUBLIC cxx_std_23)
-target_include_directories(async_nats_objects PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/include>
+target_compile_features(AsyncNatsObjects PUBLIC cxx_std_23)
+target_include_directories(AsyncNatsObjects PUBLIC
+    $<BUILD_INTERFACE:${ASYNC_NATS_CLIENT_INCLUDE}>
+    $<BUILD_INTERFACE:${ASYNC_NATS_CORE_INCLUDE}>
 )
-target_link_libraries(async_nats_objects PUBLIC
+target_include_directories(AsyncNatsObjects PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/utils
+)
+target_link_libraries(AsyncNatsObjects PUBLIC
     Boost::cobalt
     spdlog::spdlog
     Threads::Threads
 )
 
-add_library(async_nats STATIC
-    src/async_nats/main.cpp
-    src/async_nats/event_loop.cpp
-    $<TARGET_OBJECTS:async_nats_objects>
+add_library(AsyncNats STATIC
+    src/async_nats/core/main.cpp
+    src/async_nats/core/event_loop.cpp
+    $<TARGET_OBJECTS:AsyncNatsObjects>
 )
-add_library(Nats::async_nats ALIAS async_nats)
-add_dependencies(async_nats async_nats_objects)
+add_library(AsyncNats::AsyncNats ALIAS AsyncNats)
+add_dependencies(AsyncNats AsyncNatsObjects)
 
-set_target_properties(async_nats PROPERTIES
-    EXPORT_NAME async_nats
-    OUTPUT_NAME async_nats
+set_target_properties(AsyncNats PROPERTIES
+    EXPORT_NAME AsyncNats
+    OUTPUT_NAME AsyncNats
 )
 
-target_compile_features(async_nats PUBLIC cxx_std_23)
+target_compile_features(AsyncNats PUBLIC cxx_std_23)
 
-target_include_directories(async_nats PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/include>
+target_include_directories(AsyncNats PUBLIC
+    $<BUILD_INTERFACE:${ASYNC_NATS_CLIENT_INCLUDE}>
+    $<BUILD_INTERFACE:${ASYNC_NATS_CORE_INCLUDE}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+target_include_directories(AsyncNats PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/utils
+)
 
-target_link_libraries(async_nats PUBLIC
+target_link_libraries(AsyncNats PUBLIC
     Boost::cobalt
     spdlog::spdlog
     Threads::Threads
 )
 
-install(TARGETS async_nats
-    EXPORT async_natsTargets
+install(TARGETS AsyncNats
+    EXPORT AsyncNatsTargets
     COMPONENT library
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(FILES src/async_nats/include/async_nats.h
+install(FILES src/async_nats/client/include/AsyncNats.h
     COMPONENT library
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(FILES src/async_nats/include/async_nats/core.h
+install(FILES src/async_nats/core/include/AsyncNats/Core.h
     COMPONENT library
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/async_nats
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/AsyncNats
 )
 
-install(EXPORT async_natsTargets
-    FILE async_natsTargets.cmake
-    NAMESPACE Nats::
+install(EXPORT AsyncNatsTargets
+    FILE AsyncNatsTargets.cmake
+    NAMESPACE AsyncNats::
     COMPONENT library
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/async_nats
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AsyncNats
 )
 
 write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/async_natsConfigVersion.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/AsyncNatsConfigVersion.cmake"
     VERSION 0.1.0
     COMPATIBILITY SameMajorVersion
 )
 
 configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/async_natsConfig.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/async_natsConfig.cmake"
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/async_nats
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AsyncNatsConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/AsyncNatsConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AsyncNats
 )
 
 install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/async_natsConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/async_natsConfigVersion.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/AsyncNatsConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/AsyncNatsConfigVersion.cmake"
     COMPONENT library
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/async_nats
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AsyncNats
 )
 
 option(BUILD_TESTS "Build the test targets" OFF)
 if(BUILD_TESTS)
     enable_testing()
     find_package(Catch2 3 REQUIRED CONFIG)
-    add_executable(async_nats_tests tests/core_test.cpp)
-    target_link_libraries(async_nats_tests PRIVATE async_nats_objects Catch2::Catch2WithMain)
-    target_include_directories(async_nats_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats)
-    add_test(NAME async_nats_tests COMMAND async_nats_tests)
+    add_executable(AsyncNatsTests tests/core_test.cpp)
+    target_link_libraries(AsyncNatsTests PRIVATE AsyncNatsObjects Catch2::Catch2WithMain)
+    target_include_directories(AsyncNatsTests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/utils
+    )
+    add_test(NAME AsyncNatsTests COMMAND AsyncNatsTests)
 
     add_executable(pub_sub examples/pub_sub.cpp)
-    target_link_libraries(pub_sub PRIVATE async_nats)
+    target_link_libraries(pub_sub PRIVATE AsyncNats)
 endif()
-

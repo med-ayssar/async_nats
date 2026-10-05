@@ -1,12 +1,12 @@
-#include <async_nats.h>
+#include <AsyncNats.h>
 
 #include <spdlog/spdlog.h>
 
 #include <cstdlib>
 
-async_nats::main co_main(int, char**) {
+AsyncNats::Main coMain(int, char**) {
   const char* url = std::getenv("NATS_URL");
-  auto client = co_await async_nats::connect(url != nullptr ? url : "nats://127.0.0.1:4222");
+  auto client = co_await AsyncNats::connect(url != nullptr ? url : "nats://127.0.0.1:4222");
 
   constexpr auto subject = "async_nats.example";
   auto subscription = co_await client.subscribe(subject);

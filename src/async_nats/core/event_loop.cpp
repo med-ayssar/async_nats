@@ -2,8 +2,8 @@
 
 #include "session.hpp"
 
-#include <async_nats.h>
-#include <async_nats/core.h>
+#include <AsyncNats.h>
+#include <AsyncNats/Core.h>
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/signal_set.hpp>
@@ -17,52 +17,52 @@
 #include <memory>
 #include <string>
 
-namespace async_nats {
+namespace AsyncNats {
 namespace {
 
-auto watch_signals(boost::asio::signal_set& signals) -> boost::cobalt::task<void> {
+auto watchSignals(boost::asio::signal_set& signals) -> boost::cobalt::task<void> {
   auto [status, signo] = co_await signals.async_wait(boost::asio::as_tuple(boost::cobalt::use_op));
   if (status) {
     co_return;
   }
 
-  request_stop();
+  requestStop();
   std::string message = "received signal " + std::to_string(signo) + ", closing NATS client";
   if (signo == SIGINT) {
     message = "received SIGINT, closing NATS client";
   } else if (signo == SIGTERM) {
     message = "received SIGTERM, closing NATS client";
   }
-  error failure(std::move(message), error_kind::signal);
-  co_await close_all_clients(failure);
-  co_await report_error(failure);
+  Error failure(std::move(message), ErrorKind::signal);
+  co_await closeAllClients(failure);
+  co_await reportError(failure);
 }
 
 }  // namespace
 
-struct event_loop::impl {
-  core* runtime = nullptr;
+struct EventLoop::Impl {
+  Core* runtime = nullptr;
   std::unique_ptr<boost::asio::signal_set> signals;
 };
 
-event_loop::event_loop() : impl_(std::make_unique<impl>()) {}
+EventLoop::EventLoop() : impl_(std::make_unique<Impl>()) {}
 
-event_loop::~event_loop() = default;
+EventLoop::~EventLoop() = default;
 
-void event_loop::setup() {
+void EventLoop::setup() {
   if (impl_->runtime != nullptr) {
     return;
   }
-  impl_->runtime = &core::instance();
+  impl_->runtime = &Core::instance();
 }
 
-auto event_loop::run(int argc, char** argv) -> int {
+auto EventLoop::run(int argc, char** argv) -> int {
   setup();
   auto& runtime = *impl_->runtime;
-  impl_->signals = std::make_unique<boost::asio::signal_set>(runtime.io_context(), SIGINT, SIGTERM);
+  impl_->signals = std::make_unique<boost::asio::signal_set>(runtime.ioContext(), SIGINT, SIGTERM);
   std::promise<void> finished;
 
-  boost::cobalt::spawn(runtime.io_context(), watch_signals(*impl_->signals), [](std::exception_ptr exception) {
+  boost::cobalt::spawn(runtime.ioContext(), watchSignals(*impl_->signals), [](std::exception_ptr exception) {
     if (!exception) {
       return;
     }
@@ -73,7 +73,7 @@ auto event_loop::run(int argc, char** argv) -> int {
     }
   });
 
-  boost::cobalt::spawn(runtime.io_context(), co_main(argc, argv), [&](std::exception_ptr exception, int result) {
+  boost::cobalt::spawn(runtime.ioContext(), coMain(argc, argv), [&](std::exception_ptr exception, int result) {
     if (exception) {
       try {
         std::rethrow_exception(exception);
@@ -81,7 +81,7 @@ auto event_loop::run(int argc, char** argv) -> int {
         spdlog::error("Exception {}\n", error.what());
       }
     } else {
-      spdlog::info("co_main returned {}", result);
+      spdlog::info("coMain returned {}", result);
     }
 
     if (impl_->signals) {
@@ -96,4 +96,4 @@ auto event_loop::run(int argc, char** argv) -> int {
   return 0;
 }
 
-}  // namespace async_nats
+}  // namespace AsyncNats

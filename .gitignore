@@ -9,3 +9,8 @@
 result
 result-*
 .direnv
+
+# Astro site
+/docs/site/node_modules/
+/docs/site/dist/
+/docs/site/.astro/

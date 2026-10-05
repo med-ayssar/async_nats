@@ -1,19 +1,19 @@
-# async_nats
+# AsyncNats
 
-Static library that owns `main` and runs a user `co_main` on a Boost.Cobalt task. Link `Nats::async_nats` and define:
+Static library that owns `main` and runs a user `coMain` on a Boost.Cobalt task. Link `AsyncNats::AsyncNats` and define:
 
 ```cpp
-#include <async_nats.h>
+#include <AsyncNats.h>
 
-async_nats::main co_main(int argc, char* argv[]) {
-  auto client = co_await async_nats::connect("nats://127.0.0.1:4222");
-  auto js = co_await async_nats::jetstream::make(client);
+AsyncNats::Main coMain(int argc, char* argv[]) {
+  auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");
+  auto js = co_await AsyncNats::jetstream::make(client);
 
-  auto kv = co_await js.create_key_value({.bucket = "store", .history = 10});
+  auto kv = co_await js.createKeyValue({.bucket = "store", .history = 10});
   co_await kv.put("key", "value");
   auto value = co_await kv.get("key");
 
-  auto objects = co_await js.create_object_store({.bucket = "files"});
+  auto objects = co_await js.createObjectStore({.bucket = "files"});
   co_await objects.put("file", "hello");
   auto data = co_await objects.get("file");
 
@@ -21,14 +21,14 @@ async_nats::main co_main(int argc, char* argv[]) {
 }
 ```
 
-`async_nats::main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. The client API is `<async_nats.h>`. The runtime is `<async_nats/core.h>`.
+`AsyncNats::Main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. The client API is `<AsyncNats.h>`. The runtime is `<AsyncNats/Core.h>`.
 
-`main` calls a private event loop to set up the runtime before `co_main`. That loop runs the `io_context` on one thread. `NATS_EVENT_LOOP_WORKER_THREADS` sizes the worker pool and defaults to 1. The pool accepts up to twice `std::thread::hardware_concurrency()`, and at least 2. A larger value is clamped. `async_nats::core::instance()` is the process-wide runtime: `io_threads()` returns 1, `worker_threads()` reports the pool size, and `thread_pool()` is the pool for `boost::asio::post`.
+`main` calls a private event loop to set up the runtime before `coMain`. That loop runs the `io_context` on one thread. `NATS_EVENT_LOOP_WORKER_THREADS` sizes the worker pool and defaults to 1. The pool accepts up to twice `std::thread::hardware_concurrency()`, and at least 2. A larger value is clamped. `AsyncNats::Core::instance()` is the process-wide runtime: `ioThreads()` returns 1, `workerThreads()` reports the pool size, and `threadPool()` is the pool for `boost::asio::post`.
 
 ```cpp
-#include <async_nats/core.h>
+#include <AsyncNats/Core.h>
 
-boost::asio::post(async_nats::core::instance().thread_pool(), [] {
+boost::asio::post(AsyncNats::Core::instance().threadPool(), [] {
   // blocking work
 });
 ```
@@ -36,18 +36,18 @@ boost::asio::post(async_nats::core::instance().thread_pool(), [] {
 `examples/pub_sub.cpp` connects, subscribes, publishes, and reads the message back. Build it with `-DBUILD_TESTS=ON`; the executable is `pub_sub`. It uses `NATS_URL`, or `nats://127.0.0.1:4222`.
 
 ```cpp
-auto client = co_await async_nats::connect("nats://127.0.0.1:4222");
+auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");
 auto subscription = co_await client.subscribe("async_nats.example");
 co_await client.publish("async_nats.example", "hello");
 auto message = co_await subscription.next();
 ```
 
-`connect` throws `async_nats::error` when the server cannot be reached. A later dropped connection completes `closed()` with `error_kind::interrupted`. Both are logged. `error::kind()` is `unreachable`, `interrupted`, `closed`, `signal`, or `other`.
+`connect` throws `AsyncNats::Error` when the server cannot be reached. A later dropped connection completes `closed()` with `ErrorKind::interrupted`. Both are logged. `Error::kind()` is `unreachable`, `interrupted`, `closed`, `signal`, or `other`.
 
-The library handles `SIGINT` and `SIGTERM`. It closes every client, logs the signal, then runs the handler registered with `on_error`. That handler receives the `error` so the application can do extra work. `SIGKILL` cannot be handled. Call `on_error` before the first `co_await` in `co_main`.
+The library handles `SIGINT` and `SIGTERM`. It closes every client, logs the signal, then runs the handler registered with `onError`. That handler receives the `Error` so the application can do extra work. `SIGKILL` cannot be handled. Call `onError` before the first `co_await` in `coMain`.
 
 ```cpp
-async_nats::on_error([](async_nats::error failure) -> boost::cobalt::task<void> {
+AsyncNats::onError([](AsyncNats::Error failure) -> boost::cobalt::task<void> {
   co_return;
 });
 ```
@@ -56,7 +56,7 @@ async_nats::on_error([](async_nats::error failure) -> boost::cobalt::task<void> 
 
 ```cpp
 co_await client.subscribe({
-    {"Grok", [](async_nats::message message) -> boost::cobalt::task<void> {
+    {"Grok", [](AsyncNats::Message message) -> boost::cobalt::task<void> {
        co_return;
      }},
 });
@@ -103,13 +103,13 @@ nix build .#async-nats-gcc-debug
 Nix installs the package and links it at `./result`:
 
 ```text
-result/lib/libasync_nats.a
-result/include/async_nats.h
-result/include/async_nats/core.h
-result/lib/cmake/async_nats/
+result/lib/libAsyncNats.a
+result/include/AsyncNats.h
+result/include/AsyncNats/Core.h
+result/lib/cmake/AsyncNats/
 ```
 
-`./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. CMake writes that file because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides Boost and spdlog in its own search path, and CMake leaves those paths out of the database. `source env/main.zsh` sets `CLANGXX` to that Nix `clang++` and exports `NIX_CFLAGS_COMPILE` from the same shell. Neovim passes `CLANGXX` to clangd as `--query-driver`, so clangd runs the compiler. The compiler reads `NIX_CFLAGS_COMPILE` and reports Boost and spdlog. With `CLANGXX` unset, Neovim uses Homebrew `clang++`. Start Neovim from the shell where you sourced the file. `nix build` alone keeps its database inside the sandbox.
+`./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. CMake writes that file because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides Boost and spdlog in its own search path, and CMake leaves those paths out of the database. `source env/main.zsh` sets `CLANGXX` to that Nix `clang++` and exports `NIX_CFLAGS_COMPILE` from the same shell. Neovim keeps Homebrew `clangd` as the language server. When `CLANGXX` is set, it passes that compiler as `--query-driver`, so clangd runs it and the compiler reports Boost and spdlog. Start Neovim from the shell where you sourced the file. `nix build` alone keeps its database inside the sandbox.
 
 A development shell with the matching compiler, CMake, Ninja, Boost, and spdlog:
 
@@ -120,6 +120,15 @@ nix develop .#async-nats-gcc
 
 Inside the shell, `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug` uses C++23 because the project sets `CMAKE_CXX_STANDARD` to 23.
 
+## Documentation
+
+The API site is Astro Starlight in `docs/site`. The flake derivation `.#doc` provides Node.js and the `doc` command.
+
+```bash
+./doc.sh         # nix shell .#doc, build the site, serve http://127.0.0.1:4321/
+./doc.sh build   # write docs/site/dist and exit
+```
+
 ## Use the installed package
 
 ```bash
@@ -129,8 +138,8 @@ cmake -S your_app -B build -G Ninja \
 ```
 
 ```cmake
-find_package(async_nats REQUIRED)
-target_link_libraries(your_app PRIVATE Nats::async_nats)
+find_package(AsyncNats REQUIRED)
+target_link_libraries(your_app PRIVATE AsyncNats::AsyncNats)
 ```
 
-Boost and spdlog must be on the same prefix path. `nix develop .#clang` provides them. The package config calls `find_dependency` for both. The installed library is static, and your program supplies `co_main`. The library supplies `main`.
+Boost and spdlog must be on the same prefix path. `nix develop .#clang` provides them. The package config calls `find_dependency` for both. The installed library is static, and your program supplies `coMain`. The library supplies `main`.

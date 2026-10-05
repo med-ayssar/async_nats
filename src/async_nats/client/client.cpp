@@ -1,4 +1,4 @@
-#include <async_nats.h>
+#include <AsyncNats.h>
 
 #include "session.hpp"
 
@@ -26,15 +26,15 @@
 #include <utility>
 #include <vector>
 
-namespace async_nats {
+namespace AsyncNats {
 namespace {
 
-struct endpoint {
+struct Endpoint {
   std::string host;
   std::string port;
 };
 
-auto parse_url(std::string url) -> endpoint {
+auto parseUrl(std::string url) -> Endpoint {
   constexpr std::string_view scheme = "nats://";
   if (url.starts_with(scheme)) {
     url.erase(0, scheme.size());
@@ -69,33 +69,33 @@ auto split(std::string_view line) -> std::vector<std::string_view> {
   return parts;
 }
 
-void require_subject(std::string_view subject) {
+void requireSubject(std::string_view subject) {
   if (subject.empty() || subject.find_first_of(" \r\n") != std::string_view::npos) {
-    throw error("invalid subject");
+    throw Error("invalid subject");
   }
 }
 
-auto interrupted_error(const std::string& target, std::string_view reason) -> error {
-  return error("connection to NATS server " + target + " was interrupted: " + std::string(reason),
-               error_kind::interrupted);
+auto interruptedError(const std::string& target, std::string_view reason) -> Error {
+  return Error("connection to NATS server " + target + " was interrupted: " + std::string(reason),
+               ErrorKind::interrupted);
 }
 
-auto unreachable_error(const std::string& target, const boost::system::system_error& failure) -> error {
-  return error("NATS server at " + target + " is not reachable: " + failure.code().message(),
-               error_kind::unreachable);
+auto unreachableError(const std::string& target, const boost::system::system_error& failure) -> Error {
+  return Error("NATS server at " + target + " is not reachable: " + failure.code().message(),
+               ErrorKind::unreachable);
 }
 
 }  // namespace
 
-struct client::impl {
-  struct inbound {
+struct Client::Impl {
+  struct Inbound {
     std::uint64_t sid = 0;
-    message message;
+    Message message;
   };
 
-  struct pending {
+  struct Pending {
     std::coroutine_handle<> handle;
-    message* result = nullptr;
+    Message* result = nullptr;
     bool* failed = nullptr;
     std::string* reason = nullptr;
   };
@@ -106,37 +106,37 @@ struct client::impl {
   bool write_busy = false;
   std::deque<std::coroutine_handle<>> write_waiters;
   std::uint64_t next_sid = 1;
-  std::unordered_map<std::uint64_t, std::deque<message>> queues;
-  std::unordered_map<std::uint64_t, pending> waiters;
-  std::unordered_map<std::uint64_t, message_handler> handlers;
+  std::unordered_map<std::uint64_t, std::deque<Message>> queues;
+  std::unordered_map<std::uint64_t, Pending> waiters;
+  std::unordered_map<std::uint64_t, MessageHandler> handlers;
   std::unordered_map<std::string, std::vector<std::uint64_t>> routes;
   std::vector<std::coroutine_handle<>> close_waiters;
   bool failed = false;
   std::string fail_reason;
-  error_kind fail_kind = error_kind::closed;
+  ErrorKind fail_kind = ErrorKind::closed;
 
-  explicit impl(boost::asio::ip::tcp::socket socket, std::string target)
+  explicit Impl(boost::asio::ip::tcp::socket socket, std::string target)
       : socket(std::move(socket)), target(std::move(target)) {}
 
   auto enter() -> boost::cobalt::task<void> {
     co_await boost::asio::dispatch(socket.get_executor(), boost::cobalt::use_op);
   }
 
-  auto acquire_write() -> boost::cobalt::task<void> {
+  auto acquireWrite() -> boost::cobalt::task<void> {
     if (!write_busy) {
       write_busy = true;
       co_return;
     }
-    struct wait {
-      impl* self = nullptr;
+    struct Wait {
+      Impl* self = nullptr;
       bool await_ready() const noexcept { return false; }
       void await_suspend(std::coroutine_handle<> handle) { self->write_waiters.push_back(handle); }
       void await_resume() const noexcept {}
     };
-    co_await wait{this};
+    co_await Wait{this};
   }
 
-  void release_write() {
+  void releaseWrite() {
     if (write_waiters.empty()) {
       write_busy = false;
       return;
@@ -148,30 +148,30 @@ struct client::impl {
 
   auto write(std::string bytes) -> boost::cobalt::task<void> {
     co_await enter();
-    co_await acquire_write();
-    std::optional<error> failure;
+    co_await acquireWrite();
+    std::optional<Error> failure;
     try {
       co_await boost::asio::async_write(socket, boost::asio::buffer(bytes), boost::cobalt::use_op);
     } catch (const boost::system::system_error& ex) {
-      release_write();
+      releaseWrite();
       if (!failed && ex.code() != boost::asio::error::operation_aborted) {
-        failure = interrupted_error(target, ex.code().message());
+        failure = interruptedError(target, ex.code().message());
       } else {
         throw;
       }
     } catch (...) {
-      release_write();
+      releaseWrite();
       throw;
     }
     if (failure) {
-      fail_waiters(failure->what(), failure->kind());
-      co_await report_error(*failure);
+      failWaiters(failure->what(), failure->kind());
+      co_await reportError(*failure);
       throw *failure;
     }
-    release_write();
+    releaseWrite();
   }
 
-  auto read_line() -> boost::cobalt::task<std::string> {
+  auto readLine() -> boost::cobalt::task<std::string> {
     for (;;) {
       const auto mark = buffer.find("\r\n");
       if (mark != std::string::npos) {
@@ -184,7 +184,7 @@ struct client::impl {
     }
   }
 
-  auto read_exact(std::size_t size) -> boost::cobalt::task<void> {
+  auto readExact(std::size_t size) -> boost::cobalt::task<void> {
     while (buffer.size() < size) {
       co_await boost::asio::async_read_until(socket, boost::asio::dynamic_buffer(buffer), "\r\n",
                                               boost::cobalt::use_op);
@@ -196,15 +196,15 @@ struct client::impl {
     }
   }
 
-  auto read_incoming() -> boost::cobalt::task<inbound> {
+  auto readIncoming() -> boost::cobalt::task<Inbound> {
     for (;;) {
-      auto line = co_await read_line();
+      auto line = co_await readLine();
       if (line == "PING") {
         co_await write("PONG\r\n");
         continue;
       }
       if (line.starts_with("-ERR")) {
-        throw error(line);
+        throw Error(line);
       }
       if (!line.starts_with("MSG ") && !line.starts_with("HMSG ")) {
         continue;
@@ -213,10 +213,10 @@ struct client::impl {
       const bool headers = line.starts_with("HMSG ");
       const auto parts = split(line);
       if (parts.size() < 4) {
-        throw error("malformed NATS message");
+        throw Error("malformed NATS message");
       }
 
-      inbound incoming;
+      Inbound incoming;
       incoming.message.subject = std::string(parts[1]);
       incoming.sid = std::stoull(std::string(parts[2]));
       const auto size = static_cast<std::size_t>(std::stoul(std::string(parts.back())));
@@ -224,7 +224,7 @@ struct client::impl {
         incoming.message.reply = std::string(parts[3]);
       }
 
-      co_await read_exact(size + 2);
+      co_await readExact(size + 2);
       incoming.message.payload = buffer.substr(0, size);
       buffer.erase(0, size + 2);
       if (headers) {
@@ -237,7 +237,7 @@ struct client::impl {
     }
   }
 
-  void forget_route(std::uint64_t sid, const std::string& subject) {
+  void forgetRoute(std::uint64_t sid, const std::string& subject) {
     handlers.erase(sid);
     auto found = routes.find(subject);
     if (found == routes.end()) {
@@ -249,7 +249,7 @@ struct client::impl {
     }
   }
 
-  void deliver(inbound incoming) {
+  void deliver(Inbound incoming) {
     if (auto route = handlers.find(incoming.sid); route != handlers.end()) {
       try {
         auto handled = route->second(std::move(incoming.message));
@@ -279,7 +279,7 @@ struct client::impl {
     queues[incoming.sid].push_back(std::move(incoming.message));
   }
 
-  void fail_waiters(std::string reason, error_kind kind) {
+  void failWaiters(std::string reason, ErrorKind kind) {
     if (failed) {
       return;
     }
@@ -303,7 +303,7 @@ struct client::impl {
     }
   }
 
-  auto receive(std::uint64_t sid) -> boost::cobalt::task<message> {
+  auto receive(std::uint64_t sid) -> boost::cobalt::task<Message> {
     co_await enter();
     if (auto queued = queues.find(sid); queued != queues.end() && !queued->second.empty()) {
       auto message = std::move(queued->second.front());
@@ -311,32 +311,32 @@ struct client::impl {
       co_return message;
     }
     if (failed) {
-      throw error(fail_reason.empty() ? "connection closed" : fail_reason, fail_kind);
+      throw Error(fail_reason.empty() ? "connection closed" : fail_reason, fail_kind);
     }
 
-    struct wait {
-      impl* self = nullptr;
+    struct Wait {
+      Impl* self = nullptr;
       std::uint64_t sid = 0;
-      message result;
+      Message result;
       bool failed = false;
       std::string reason;
       bool await_ready() const noexcept { return false; }
       void await_suspend(std::coroutine_handle<> handle) {
-        self->waiters[sid] = pending{handle, &result, &failed, &reason};
+        self->waiters[sid] = Pending{handle, &result, &failed, &reason};
       }
       void await_resume() const {
         if (failed) {
-          throw error(reason.empty() ? "subscription closed" : reason);
+          throw Error(reason.empty() ? "subscription closed" : reason);
         }
       }
     };
 
-    wait operation{this, sid};
+    Wait operation{this, sid};
     co_await operation;
     co_return std::move(operation.result);
   }
 
-  auto shutdown(std::string reason, error_kind kind) -> boost::cobalt::task<void> {
+  auto shutdown(std::string reason, ErrorKind kind) -> boost::cobalt::task<void> {
     co_await enter();
     if (failed && !socket.is_open()) {
       co_return;
@@ -347,28 +347,28 @@ struct client::impl {
     socket.cancel(ignored);
     socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignored);
     socket.close(ignored);
-    fail_waiters(std::move(reason), kind);
+    failWaiters(std::move(reason), kind);
   }
 
-  struct registry {
-    error_handler handler;
-    std::vector<std::weak_ptr<impl>> clients;
+  struct Registry {
+    ErrorHandler handler;
+    std::vector<std::weak_ptr<Impl>> clients;
     bool stopping = false;
     bool in_handler = false;
   };
 
-  static auto sessions() -> registry& {
-    static registry state;
+  static auto sessions() -> Registry& {
+    static Registry state;
     return state;
   }
 
-  static void track(const std::shared_ptr<impl>& connection) {
-    std::erase_if(sessions().clients, [](const std::weak_ptr<impl>& client) { return client.expired(); });
+  static void track(const std::shared_ptr<Impl>& connection) {
+    std::erase_if(sessions().clients, [](const std::weak_ptr<Impl>& client) { return client.expired(); });
     sessions().clients.push_back(connection);
   }
 
-  static auto close_all(const error& failure) -> boost::cobalt::task<void> {
-    std::vector<std::shared_ptr<impl>> open;
+  static auto closeAll(const Error& failure) -> boost::cobalt::task<void> {
+    std::vector<std::shared_ptr<Impl>> open;
     for (auto& client : sessions().clients) {
       if (auto connection = client.lock()) {
         open.push_back(std::move(connection));
@@ -380,49 +380,49 @@ struct client::impl {
     }
   }
 
-  auto read_loop(std::shared_ptr<impl> self) -> boost::cobalt::task<void> {
-    std::optional<error> failure;
+  auto readLoop(std::shared_ptr<Impl> self) -> boost::cobalt::task<void> {
+    std::optional<Error> failure;
     try {
       for (;;) {
-        auto incoming = co_await self->read_incoming();
+        auto incoming = co_await self->readIncoming();
         self->deliver(std::move(incoming));
       }
-    } catch (const error& ex) {
+    } catch (const Error& ex) {
       if (!self->failed) {
         failure = ex;
       }
     } catch (const boost::system::system_error& ex) {
       if (!self->failed && ex.code() != boost::asio::error::operation_aborted) {
-        failure = interrupted_error(self->target, ex.code().message());
+        failure = interruptedError(self->target, ex.code().message());
       }
     } catch (const std::exception& ex) {
       if (!self->failed) {
-        failure = interrupted_error(self->target, ex.what());
+        failure = interruptedError(self->target, ex.what());
       }
     }
     if (!failure) {
       co_return;
     }
-    self->fail_waiters(failure->what(), failure->kind());
-    co_await report_error(*failure);
+    self->failWaiters(failure->what(), failure->kind());
+    co_await reportError(*failure);
   }
 };
 
-auto report_error(const error& failure) -> boost::cobalt::task<void> {
-  if (failure.kind() == error_kind::signal) {
+auto reportError(const Error& failure) -> boost::cobalt::task<void> {
+  if (failure.kind() == ErrorKind::signal) {
     spdlog::info("{}", failure.what());
-  } else if (failure.kind() != error_kind::closed) {
+  } else if (failure.kind() != ErrorKind::closed) {
     spdlog::error("{}", failure.what());
   }
-  auto handler = client::impl::sessions().handler;
-  if (!handler || client::impl::sessions().in_handler) {
+  auto handler = Client::Impl::sessions().handler;
+  if (!handler || Client::Impl::sessions().in_handler) {
     co_return;
   }
-  client::impl::sessions().in_handler = true;
-  struct clear {
+  Client::Impl::sessions().in_handler = true;
+  struct Clear {
     bool& flag;
-    ~clear() { flag = false; }
-  } guard{client::impl::sessions().in_handler};
+    ~Clear() { flag = false; }
+  } guard{Client::Impl::sessions().in_handler};
   try {
     co_await handler(failure);
   } catch (const std::exception& ex) {
@@ -430,56 +430,56 @@ auto report_error(const error& failure) -> boost::cobalt::task<void> {
   }
 }
 
-void on_error(error_handler handler) { client::impl::sessions().handler = std::move(handler); }
+void onError(ErrorHandler handler) { Client::Impl::sessions().handler = std::move(handler); }
 
-void request_stop() { client::impl::sessions().stopping = true; }
+void requestStop() { Client::Impl::sessions().stopping = true; }
 
-auto stop_requested() -> bool { return client::impl::sessions().stopping; }
+auto stopRequested() -> bool { return Client::Impl::sessions().stopping; }
 
-auto close_all_clients(const error& failure) -> boost::cobalt::task<void> {
-  co_await client::impl::close_all(failure);
+auto closeAllClients(const Error& failure) -> boost::cobalt::task<void> {
+  co_await Client::Impl::closeAll(failure);
 }
 
-struct subscription::state {
-  std::shared_ptr<client::impl> connection;
+struct Subscription::State {
+  std::shared_ptr<Client::Impl> connection;
   std::uint64_t sid = 0;
   bool open = false;
 };
 
-subscription::subscription(std::shared_ptr<state> state) : state_(std::move(state)) {}
+Subscription::Subscription(std::shared_ptr<State> state) : state_(std::move(state)) {}
 
-subscription::subscription(subscription&&) noexcept = default;
+Subscription::Subscription(Subscription&&) noexcept = default;
 
-auto subscription::operator=(subscription&&) noexcept -> subscription& = default;
+auto Subscription::operator=(Subscription&&) noexcept -> Subscription& = default;
 
-subscription::~subscription() = default;
+Subscription::~Subscription() = default;
 
-client::client(std::shared_ptr<impl> impl) : impl_(std::move(impl)) {}
+Client::Client(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
-auto connect(std::string url) -> boost::cobalt::task<client> {
-  if (stop_requested()) {
-    throw error("received signal, closing NATS client", error_kind::signal);
+auto connect(std::string url) -> boost::cobalt::task<Client> {
+  if (stopRequested()) {
+    throw Error("received signal, closing NATS client", ErrorKind::signal);
   }
-  const auto where = parse_url(std::move(url));
+  const auto where = parseUrl(std::move(url));
   const auto target = where.host + ":" + where.port;
   auto executor = co_await boost::cobalt::this_coro::executor;
   auto resolver = boost::asio::ip::tcp::resolver{executor};
 
-  std::optional<error> failure;
+  std::optional<Error> failure;
   boost::asio::ip::tcp::resolver::results_type results;
   try {
     results = co_await resolver.async_resolve(where.host, where.port, boost::cobalt::use_op);
   } catch (const boost::system::system_error& ex) {
-    failure = unreachable_error(target, ex);
+    failure = unreachableError(target, ex);
   } catch (const std::exception& ex) {
-    failure = error("NATS server at " + target + " is not reachable: " + ex.what(), error_kind::unreachable);
+    failure = Error("NATS server at " + target + " is not reachable: " + ex.what(), ErrorKind::unreachable);
   }
   if (failure) {
-    co_await report_error(*failure);
+    co_await reportError(*failure);
     throw *failure;
   }
-  if (stop_requested()) {
-    throw error("received signal, closing NATS client", error_kind::signal);
+  if (stopRequested()) {
+    throw Error("received signal, closing NATS client", ErrorKind::signal);
   }
 
   auto strand = boost::asio::make_strand(executor);
@@ -488,32 +488,32 @@ auto connect(std::string url) -> boost::cobalt::task<client> {
   try {
     co_await boost::asio::async_connect(socket, results, boost::cobalt::use_op);
   } catch (const boost::system::system_error& ex) {
-    failure = unreachable_error(target, ex);
+    failure = unreachableError(target, ex);
   } catch (const std::exception& ex) {
-    failure = error("NATS server at " + target + " is not reachable: " + ex.what(), error_kind::unreachable);
+    failure = Error("NATS server at " + target + " is not reachable: " + ex.what(), ErrorKind::unreachable);
   }
   if (failure) {
-    co_await report_error(*failure);
+    co_await reportError(*failure);
     throw *failure;
   }
 
-  auto state = std::make_shared<client::impl>(std::move(socket), target);
-  if (stop_requested()) {
-    co_await state->shutdown("received signal, closing NATS client", error_kind::signal);
-    throw error("received signal, closing NATS client", error_kind::signal);
+  auto state = std::make_shared<Client::Impl>(std::move(socket), target);
+  if (stopRequested()) {
+    co_await state->shutdown("received signal, closing NATS client", ErrorKind::signal);
+    throw Error("received signal, closing NATS client", ErrorKind::signal);
   }
 
-  std::optional<error> reported;
+  std::optional<Error> reported;
   try {
-    const auto info = co_await state->read_line();
+    const auto info = co_await state->readLine();
     if (!info.starts_with("INFO ")) {
-      failure = error("NATS server at " + target + " did not send INFO", error_kind::interrupted);
+      failure = Error("NATS server at " + target + " did not send INFO", ErrorKind::interrupted);
     } else {
       co_await state->write(
           "CONNECT {\"verbose\":false,\"pedantic\":false,\"tls_required\":false,"
           "\"lang\":\"cpp\",\"version\":\"0.1.0\",\"protocol\":1}\r\nPING\r\n");
       for (;;) {
-        auto line = co_await state->read_line();
+        auto line = co_await state->readLine();
         if (line == "PONG") {
           break;
         }
@@ -522,37 +522,37 @@ auto connect(std::string url) -> boost::cobalt::task<client> {
           continue;
         }
         if (line.starts_with("-ERR")) {
-          failure = error(std::move(line), error_kind::interrupted);
+          failure = Error(std::move(line), ErrorKind::interrupted);
           break;
         }
       }
     }
-  } catch (const error& ex) {
+  } catch (const Error& ex) {
     reported = ex;
   } catch (const boost::system::system_error& ex) {
-    failure = interrupted_error(target, ex.code().message());
+    failure = interruptedError(target, ex.code().message());
   } catch (const std::exception& ex) {
-    failure = interrupted_error(target, ex.what());
+    failure = interruptedError(target, ex.what());
   }
   if (reported) {
     if (!state->failed) {
       co_await state->shutdown(reported->what(), reported->kind());
-      co_await report_error(*reported);
+      co_await reportError(*reported);
     }
     throw *reported;
   }
   if (failure) {
     co_await state->shutdown(failure->what(), failure->kind());
-    co_await report_error(*failure);
+    co_await reportError(*failure);
     throw *failure;
   }
-  if (stop_requested()) {
-    co_await state->shutdown("received signal, closing NATS client", error_kind::signal);
-    throw error("received signal, closing NATS client", error_kind::signal);
+  if (stopRequested()) {
+    co_await state->shutdown("received signal, closing NATS client", ErrorKind::signal);
+    throw Error("received signal, closing NATS client", ErrorKind::signal);
   }
 
-  client::impl::track(state);
-  boost::cobalt::spawn(state->socket.get_executor(), state->read_loop(state), [](std::exception_ptr exception) {
+  Client::Impl::track(state);
+  boost::cobalt::spawn(state->socket.get_executor(), state->readLoop(state), [](std::exception_ptr exception) {
     if (!exception) {
       return;
     }
@@ -563,40 +563,40 @@ auto connect(std::string url) -> boost::cobalt::task<client> {
     }
   });
 
-  co_return client{std::move(state)};
+  co_return Client{std::move(state)};
 }
 
-auto client::publish(std::string subject, std::string payload) -> boost::cobalt::task<void> {
+auto Client::publish(std::string subject, std::string payload) -> boost::cobalt::task<void> {
   if (!impl_) {
-    throw error("client is not connected");
+    throw Error("client is not connected");
   }
-  require_subject(subject);
+  requireSubject(subject);
   co_await impl_->write("PUB " + subject + " " + std::to_string(payload.size()) + "\r\n" + payload + "\r\n");
 }
 
-auto client::subscribe(std::string subject) -> boost::cobalt::task<subscription> {
+auto Client::subscribe(std::string subject) -> boost::cobalt::task<Subscription> {
   if (!impl_) {
-    throw error("client is not connected");
+    throw Error("client is not connected");
   }
-  require_subject(subject);
+  requireSubject(subject);
   co_await impl_->enter();
   const auto sid = impl_->next_sid++;
   co_await impl_->write("SUB " + subject + " " + std::to_string(sid) + "\r\n");
-  auto state = std::make_shared<subscription::state>();
+  auto state = std::make_shared<Subscription::State>();
   state->connection = impl_;
   state->sid = sid;
   state->open = true;
-  co_return subscription{std::move(state)};
+  co_return Subscription{std::move(state)};
 }
 
-auto client::subscribe(std::vector<route> routes) -> boost::cobalt::task<void> {
+auto Client::subscribe(std::vector<Route> routes) -> boost::cobalt::task<void> {
   if (!impl_) {
-    throw error("client is not connected");
+    throw Error("client is not connected");
   }
   for (const auto& route : routes) {
-    require_subject(route.subject);
+    requireSubject(route.subject);
     if (!route.handler) {
-      throw error("invalid handler");
+      throw Error("invalid handler");
     }
   }
   if (routes.empty()) {
@@ -618,18 +618,18 @@ auto client::subscribe(std::vector<route> routes) -> boost::cobalt::task<void> {
     co_await impl_->write(std::move(frame));
   } catch (...) {
     for (const auto& [sid, subject] : added) {
-      impl_->forget_route(sid, subject);
+      impl_->forgetRoute(sid, subject);
     }
     throw;
   }
 }
 
-auto client::unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void> {
+auto Client::unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void> {
   if (!impl_) {
-    throw error("client is not connected");
+    throw Error("client is not connected");
   }
   for (const auto& subject : subjects) {
-    require_subject(subject);
+    requireSubject(subject);
   }
   if (subjects.empty()) {
     co_return;
@@ -660,41 +660,41 @@ auto client::unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::ta
   }
 }
 
-auto client::close() -> boost::cobalt::task<void> {
+auto Client::close() -> boost::cobalt::task<void> {
   if (!impl_) {
     co_return;
   }
-  co_await impl_->shutdown("connection closed", error_kind::closed);
+  co_await impl_->shutdown("connection closed", ErrorKind::closed);
 }
 
-auto client::closed() -> boost::cobalt::task<void> {
+auto Client::closed() -> boost::cobalt::task<void> {
   if (!impl_) {
-    throw error("client is not connected");
+    throw Error("client is not connected");
   }
   co_await impl_->enter();
   if (impl_->failed) {
-    throw error(impl_->fail_reason.empty() ? "connection closed" : impl_->fail_reason, impl_->fail_kind);
+    throw Error(impl_->fail_reason.empty() ? "connection closed" : impl_->fail_reason, impl_->fail_kind);
   }
 
-  struct wait {
-    impl* self = nullptr;
+  struct Wait {
+    Impl* self = nullptr;
     bool await_ready() const noexcept { return false; }
     void await_suspend(std::coroutine_handle<> handle) { self->close_waiters.push_back(handle); }
     void await_resume() const noexcept {}
   };
 
-  co_await wait{impl_.get()};
-  throw error(impl_->fail_reason.empty() ? "connection closed" : impl_->fail_reason, impl_->fail_kind);
+  co_await Wait{impl_.get()};
+  throw Error(impl_->fail_reason.empty() ? "connection closed" : impl_->fail_reason, impl_->fail_kind);
 }
 
-auto subscription::next() -> boost::cobalt::task<message> {
+auto Subscription::next() -> boost::cobalt::task<Message> {
   if (!state_ || !state_->open || !state_->connection) {
-    throw error("subscription is closed");
+    throw Error("subscription is closed");
   }
   co_return co_await state_->connection->receive(state_->sid);
 }
 
-auto subscription::unsubscribe() -> boost::cobalt::task<void> {
+auto Subscription::unsubscribe() -> boost::cobalt::task<void> {
   if (!state_ || !state_->open || !state_->connection) {
     co_return;
   }
@@ -713,16 +713,16 @@ auto subscription::unsubscribe() -> boost::cobalt::task<void> {
   state_->connection.reset();
 }
 
-auto client::request(std::string subject, std::string payload) -> boost::cobalt::task<std::string> {
+auto Client::request(std::string subject, std::string payload) -> boost::cobalt::task<std::string> {
   return request(std::move(subject), std::move(payload), {});
 }
 
-auto client::request(std::string subject, std::string payload,
+auto Client::request(std::string subject, std::string payload,
                      std::vector<std::pair<std::string, std::string>> headers) -> boost::cobalt::task<std::string> {
   if (!impl_) {
-    throw error("client is not connected");
+    throw Error("client is not connected");
   }
-  require_subject(subject);
+  requireSubject(subject);
   co_await impl_->enter();
   const auto sid = impl_->next_sid++;
   const auto inbox = "_INBOX." + std::to_string(sid);
@@ -749,4 +749,4 @@ auto client::request(std::string subject, std::string payload,
   co_return std::move(response.payload);
 }
 
-}  // namespace async_nats
+}  // namespace AsyncNats

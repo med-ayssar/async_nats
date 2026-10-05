@@ -1,4 +1,4 @@
-#include <async_nats.h>
+#include <AsyncNats.h>
 
 #include <algorithm>
 #include <array>
@@ -12,17 +12,17 @@
 #include <utility>
 #include <vector>
 
-namespace async_nats {
+namespace AsyncNats {
 namespace {
 
-struct api_failure {
+struct ApiFailure {
   bool failed = false;
   int code = 0;
   int err_code = 0;
   std::string description;
 };
 
-auto json_escape(std::string_view text) -> std::string {
+auto jsonEscape(std::string_view text) -> std::string {
   std::string out;
   out.reserve(text.size());
   for (unsigned char c : text) {
@@ -56,14 +56,14 @@ auto json_escape(std::string_view text) -> std::string {
   return out;
 }
 
-auto skip_ws(std::string_view json, std::size_t pos) -> std::size_t {
+auto skipWs(std::string_view json, std::size_t pos) -> std::size_t {
   while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos])) != 0) {
     ++pos;
   }
   return pos;
 }
 
-auto find_key(std::string_view json, std::string_view key) -> std::size_t {
+auto findKey(std::string_view json, std::string_view key) -> std::size_t {
   const auto pattern = std::string("\"") + std::string(key) + "\"";
   auto pos = json.find(pattern);
   if (pos == std::string_view::npos) {
@@ -73,11 +73,11 @@ auto find_key(std::string_view json, std::string_view key) -> std::size_t {
   if (pos == std::string_view::npos) {
     return std::string_view::npos;
   }
-  return skip_ws(json, pos + 1);
+  return skipWs(json, pos + 1);
 }
 
-auto json_string(std::string_view json, std::string_view key) -> std::optional<std::string> {
-  auto pos = find_key(json, key);
+auto jsonString(std::string_view json, std::string_view key) -> std::optional<std::string> {
+  auto pos = findKey(json, key);
   if (pos == std::string_view::npos || pos >= json.size() || json[pos] != '"') {
     return std::nullopt;
   }
@@ -122,8 +122,8 @@ auto json_string(std::string_view json, std::string_view key) -> std::optional<s
   return std::nullopt;
 }
 
-auto json_uint(std::string_view json, std::string_view key) -> std::optional<std::uint64_t> {
-  auto pos = find_key(json, key);
+auto jsonUint(std::string_view json, std::string_view key) -> std::optional<std::uint64_t> {
+  auto pos = findKey(json, key);
   if (pos == std::string_view::npos || pos >= json.size() || std::isdigit(static_cast<unsigned char>(json[pos])) == 0) {
     return std::nullopt;
   }
@@ -135,8 +135,8 @@ auto json_uint(std::string_view json, std::string_view key) -> std::optional<std
   return value;
 }
 
-auto json_bool(std::string_view json, std::string_view key) -> std::optional<bool> {
-  auto pos = find_key(json, key);
+auto jsonBool(std::string_view json, std::string_view key) -> std::optional<bool> {
+  auto pos = findKey(json, key);
   if (pos == std::string_view::npos) {
     return std::nullopt;
   }
@@ -149,22 +149,22 @@ auto json_bool(std::string_view json, std::string_view key) -> std::optional<boo
   return std::nullopt;
 }
 
-auto read_api_failure(std::string_view json) -> api_failure {
-  auto pos = find_key(json, "error");
+auto readApiFailure(std::string_view json) -> ApiFailure {
+  auto pos = findKey(json, "error");
   if (pos == std::string_view::npos || pos >= json.size() || json[pos] != '{') {
     return {};
   }
   const auto end = json.find('}', pos);
   const auto object = json.substr(pos, end == std::string_view::npos ? json.size() - pos : end - pos + 1);
-  api_failure failure;
+  ApiFailure failure;
   failure.failed = true;
-  if (auto code = json_uint(object, "code")) {
+  if (auto code = jsonUint(object, "code")) {
     failure.code = static_cast<int>(*code);
   }
-  if (auto err_code = json_uint(object, "err_code")) {
+  if (auto err_code = jsonUint(object, "err_code")) {
     failure.err_code = static_cast<int>(*err_code);
   }
-  if (auto description = json_string(object, "description")) {
+  if (auto description = jsonString(object, "description")) {
     failure.description = std::move(*description);
   } else {
     failure.description = "jetstream request failed";
@@ -172,14 +172,14 @@ auto read_api_failure(std::string_view json) -> api_failure {
   return failure;
 }
 
-auto missing_message(const api_failure& failure) -> bool {
+auto missingMessage(const ApiFailure& failure) -> bool {
   return failure.code == 404 || failure.err_code == 10037 || failure.err_code == 10059 || failure.err_code == 10014;
 }
 
 constexpr char kBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 constexpr char kBase64Url[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-auto base64_encode(std::string_view input, bool url) -> std::string {
+auto base64Encode(std::string_view input, bool url) -> std::string {
   const auto* alphabet = url ? kBase64Url : kBase64;
   std::string out;
   out.reserve((input.size() + 2) / 3 * 4);
@@ -211,7 +211,7 @@ auto base64_encode(std::string_view input, bool url) -> std::string {
   return out;
 }
 
-auto base64_decode(std::string_view input) -> std::string {
+auto base64Decode(std::string_view input) -> std::string {
   auto value = [](char c) -> int {
     if (c >= 'A' && c <= 'Z') {
       return c - 'A';
@@ -241,7 +241,7 @@ auto base64_decode(std::string_view input) -> std::string {
     }
     const auto decoded = value(c);
     if (decoded < 0) {
-      throw error("invalid base64");
+      throw Error("invalid base64");
     }
     block[count++] = decoded;
     if (count == 4) {
@@ -274,9 +274,9 @@ constexpr auto rotr(std::uint32_t value, std::uint32_t bits) -> std::uint32_t {
   return (value >> bits) | (value << (32 - bits));
 }
 
-class sha256 {
+class Sha256 {
  public:
-  sha256() {
+  Sha256() {
     state_ = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
   }
 
@@ -374,7 +374,7 @@ class sha256 {
   std::size_t used_ = 0;
 };
 
-auto valid_bucket(std::string_view bucket) -> bool {
+auto validBucket(std::string_view bucket) -> bool {
   if (bucket.empty()) {
     return false;
   }
@@ -383,7 +383,7 @@ auto valid_bucket(std::string_view bucket) -> bool {
   });
 }
 
-auto valid_key(std::string_view key) -> bool {
+auto validKey(std::string_view key) -> bool {
   if (key.empty() || key.front() == '.' || key.back() == '.') {
     return false;
   }
@@ -392,67 +392,67 @@ auto valid_key(std::string_view key) -> bool {
   });
 }
 
-auto require_bucket(std::string_view bucket) -> void {
-  if (!valid_bucket(bucket)) {
-    throw error("invalid bucket name");
+auto requireBucket(std::string_view bucket) -> void {
+  if (!validBucket(bucket)) {
+    throw Error("invalid bucket name");
   }
 }
 
-auto require_key(std::string_view key) -> void {
-  if (!valid_key(key)) {
-    throw error("invalid key");
+auto requireKey(std::string_view key) -> void {
+  if (!validKey(key)) {
+    throw Error("invalid key");
   }
 }
 
 constexpr std::uint64_t kWrongLastSequence = 10071;
 constexpr std::size_t kObjectChunkSize = 128 * 1024;
 
-using headers = std::vector<std::pair<std::string, std::string>>;
+using Headers = std::vector<std::pair<std::string, std::string>>;
 
-auto call(client& connection, std::string subject, std::string payload, headers fields = {})
+auto call(Client& connection, std::string subject, std::string payload, Headers fields = {})
     -> boost::cobalt::task<std::string> {
   co_return co_await connection.request(std::move(subject), std::move(payload), std::move(fields));
 }
 
-auto revision_of(std::string_view ack) -> std::uint64_t {
-  const auto failure = read_api_failure(ack);
+auto revisionOf(std::string_view ack) -> std::uint64_t {
+  const auto failure = readApiFailure(ack);
   if (failure.failed) {
-    throw error(failure.description);
+    throw Error(failure.description);
   }
-  const auto sequence = json_uint(ack, "seq");
+  const auto sequence = jsonUint(ack, "seq");
   if (!sequence) {
-    throw error("jetstream publish was not acknowledged");
+    throw Error("jetstream publish was not acknowledged");
   }
   return *sequence;
 }
 
-struct stored_message {
+struct StoredMessage {
   std::string subject;
   std::string data;
   std::string headers;
   std::uint64_t sequence = 0;
 };
 
-auto message_from_get(std::string_view json) -> stored_message {
-  stored_message message;
-  if (auto sequence = json_uint(json, "seq")) {
+auto messageFromGet(std::string_view json) -> StoredMessage {
+  StoredMessage message;
+  if (auto sequence = jsonUint(json, "seq")) {
     message.sequence = *sequence;
   }
-  if (auto subject = json_string(json, "subject")) {
+  if (auto subject = jsonString(json, "subject")) {
     message.subject = std::move(*subject);
   }
-  if (auto data = json_string(json, "data")) {
-    message.data = base64_decode(*data);
+  if (auto data = jsonString(json, "data")) {
+    message.data = base64Decode(*data);
   }
-  if (auto header = json_string(json, "hdrs")) {
-    message.headers = base64_decode(*header);
+  if (auto header = jsonString(json, "hdrs")) {
+    message.headers = base64Decode(*header);
   }
   return message;
 }
 
-enum class operation { put, del, purge };
+enum class Operation { put, del, purge };
 
-auto operation_from_headers(std::string_view header_block) -> operation {
+auto operationFromHeaders(std::string_view header_block) -> Operation {
   const auto marker = header_block.find("KV-Operation:");
   if (marker != std::string_view::npos) {
     auto value = header_block.substr(marker + std::string_view("KV-Operation:").size());
@@ -460,23 +460,23 @@ auto operation_from_headers(std::string_view header_block) -> operation {
       value.remove_prefix(1);
     }
     if (value.starts_with("PURGE")) {
-      return operation::purge;
+      return Operation::purge;
     }
     if (value.starts_with("DEL")) {
-      return operation::del;
+      return Operation::del;
     }
   }
   if (header_block.find("Nats-Marker-Reason: Purge") != std::string_view::npos ||
       header_block.find("Nats-Marker-Reason: MaxAge") != std::string_view::npos) {
-    return operation::purge;
+    return Operation::purge;
   }
   if (header_block.find("Nats-Marker-Reason: Remove") != std::string_view::npos) {
-    return operation::del;
+    return Operation::del;
   }
-  return operation::put;
+  return Operation::put;
 }
 
-auto new_nuid() -> std::string {
+auto newNuid() -> std::string {
   static constexpr char alphabet[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   std::random_device device;
   std::uniform_int_distribution<int> pick(0, 61);
@@ -487,7 +487,7 @@ auto new_nuid() -> std::string {
   return id;
 }
 
-struct object_meta {
+struct ObjectMeta {
   std::string name;
   std::string nuid;
   std::uint64_t size = 0;
@@ -495,21 +495,21 @@ struct object_meta {
   bool deleted = false;
 };
 
-auto meta_from_json(std::string_view json) -> object_meta {
-  object_meta meta;
-  if (auto name = json_string(json, "name")) {
+auto metaFromJson(std::string_view json) -> ObjectMeta {
+  ObjectMeta meta;
+  if (auto name = jsonString(json, "name")) {
     meta.name = std::move(*name);
   }
-  if (auto nuid = json_string(json, "nuid")) {
+  if (auto nuid = jsonString(json, "nuid")) {
     meta.nuid = std::move(*nuid);
   }
-  if (auto size = json_uint(json, "size")) {
+  if (auto size = jsonUint(json, "size")) {
     meta.size = *size;
   }
-  if (auto chunks = json_uint(json, "chunks")) {
+  if (auto chunks = jsonUint(json, "chunks")) {
     meta.chunks = *chunks;
   }
-  if (auto deleted = json_bool(json, "deleted")) {
+  if (auto deleted = jsonBool(json, "deleted")) {
     meta.deleted = *deleted;
   }
   return meta;
@@ -517,143 +517,143 @@ auto meta_from_json(std::string_view json) -> object_meta {
 
 }  // namespace
 
-jetstream::kv::store::store(client client, std::string bucket) : client_(std::move(client)), bucket_(std::move(bucket)) {}
+jetstream::kv::Store::Store(Client client, std::string bucket) : client_(std::move(client)), bucket_(std::move(bucket)) {}
 
 namespace {
 
-auto kv_subject(std::string_view bucket, std::string_view key) -> std::string {
+auto kvSubject(std::string_view bucket, std::string_view key) -> std::string {
   return "$KV." + std::string(bucket) + "." + std::string(key);
 }
 
 }  // namespace
 
-auto jetstream::kv::store::put(std::string key, std::string value) -> boost::cobalt::task<std::uint64_t> {
-  require_key(key);
-  const auto ack = co_await call(client_, kv_subject(bucket_, key), std::move(value));
-  co_return revision_of(ack);
+auto jetstream::kv::Store::put(std::string key, std::string value) -> boost::cobalt::task<std::uint64_t> {
+  requireKey(key);
+  const auto ack = co_await call(client_, kvSubject(bucket_, key), std::move(value));
+  co_return revisionOf(ack);
 }
 
-auto jetstream::kv::store::update(std::string key, std::string value, std::uint64_t revision) -> boost::cobalt::task<std::uint64_t> {
-  require_key(key);
-  const auto ack = co_await call(client_, kv_subject(bucket_, key), std::move(value),
+auto jetstream::kv::Store::update(std::string key, std::string value, std::uint64_t revision) -> boost::cobalt::task<std::uint64_t> {
+  requireKey(key);
+  const auto ack = co_await call(client_, kvSubject(bucket_, key), std::move(value),
                                  {{"Nats-Expected-Last-Subject-Sequence", std::to_string(revision)}});
-  co_return revision_of(ack);
+  co_return revisionOf(ack);
 }
 
 namespace {
 
-struct kv_record {
+struct KvRecord {
   std::string value;
   std::uint64_t revision = 0;
-  operation operation = operation::put;
+  Operation operation = Operation::put;
 };
 
-auto load_key(client& connection, std::string_view bucket, std::string_view key) -> boost::cobalt::task<std::optional<kv_record>> {
+auto loadKey(Client& connection, std::string_view bucket, std::string_view key) -> boost::cobalt::task<std::optional<KvRecord>> {
   const auto subject = "$KV." + std::string(bucket) + "." + std::string(key);
   const auto response =
       co_await call(connection, "$JS.API.STREAM.MSG.GET.KV_" + std::string(bucket),
-                    std::string("{\"last_by_subj\":\"") + json_escape(subject) + "\"}");
-  const auto failure = read_api_failure(response);
+                    std::string("{\"last_by_subj\":\"") + jsonEscape(subject) + "\"}");
+  const auto failure = readApiFailure(response);
   if (failure.failed) {
-    if (missing_message(failure)) {
+    if (missingMessage(failure)) {
       co_return std::nullopt;
     }
-    throw error(failure.description);
+    throw Error(failure.description);
   }
-  auto message = message_from_get(response);
-  co_return kv_record{std::move(message.data), message.sequence, operation_from_headers(message.headers)};
+  auto message = messageFromGet(response);
+  co_return KvRecord{std::move(message.data), message.sequence, operationFromHeaders(message.headers)};
 }
 
 }  // namespace
 
-auto jetstream::kv::store::create(std::string key, std::string value) -> boost::cobalt::task<std::uint64_t> {
-  require_key(key);
-  const auto subject = kv_subject(bucket_, key);
+auto jetstream::kv::Store::create(std::string key, std::string value) -> boost::cobalt::task<std::uint64_t> {
+  requireKey(key);
+  const auto subject = kvSubject(bucket_, key);
   const auto ack =
       co_await call(client_, subject, value, {{"Nats-Expected-Last-Subject-Sequence", "0"}});
-  const auto failure = read_api_failure(ack);
+  const auto failure = readApiFailure(ack);
   if (!failure.failed) {
-    co_return revision_of(ack);
+    co_return revisionOf(ack);
   }
   if (failure.err_code != kWrongLastSequence) {
-    throw error(failure.description);
+    throw Error(failure.description);
   }
 
-  const auto current = co_await load_key(client_, bucket_, key);
-  if (!current || current->operation == operation::put) {
-    throw error("key already exists");
+  const auto current = co_await loadKey(client_, bucket_, key);
+  if (!current || current->operation == Operation::put) {
+    throw Error("key already exists");
   }
   co_return co_await update(std::move(key), std::move(value), current->revision);
 }
 
-auto jetstream::kv::store::get(std::string key) -> boost::cobalt::task<std::optional<std::string>> {
-  require_key(key);
-  const auto current = co_await load_key(client_, bucket_, key);
-  if (!current || current->operation != operation::put) {
+auto jetstream::kv::Store::get(std::string key) -> boost::cobalt::task<std::optional<std::string>> {
+  requireKey(key);
+  const auto current = co_await loadKey(client_, bucket_, key);
+  if (!current || current->operation != Operation::put) {
     co_return std::nullopt;
   }
   co_return current->value;
 }
 
-auto jetstream::kv::store::entry(std::string key) -> boost::cobalt::task<std::optional<struct entry>> {
-  require_key(key);
-  const auto current = co_await load_key(client_, bucket_, key);
-  if (!current || current->operation != operation::put) {
+auto jetstream::kv::Store::entry(std::string key) -> boost::cobalt::task<std::optional<struct Entry>> {
+  requireKey(key);
+  const auto current = co_await loadKey(client_, bucket_, key);
+  if (!current || current->operation != Operation::put) {
     co_return std::nullopt;
   }
-  co_return jetstream::kv::entry{std::move(key), current->value, current->revision};
+  co_return jetstream::kv::Entry{std::move(key), current->value, current->revision};
 }
 
-auto jetstream::kv::store::delete_(std::string key) -> boost::cobalt::task<void> {
-  require_key(key);
-  const auto ack = co_await call(client_, kv_subject(bucket_, key), "", {{"KV-Operation", "DEL"}});
-  revision_of(ack);
+auto jetstream::kv::Store::remove(std::string key) -> boost::cobalt::task<void> {
+  requireKey(key);
+  const auto ack = co_await call(client_, kvSubject(bucket_, key), "", {{"KV-Operation", "DEL"}});
+  revisionOf(ack);
   co_return;
 }
 
-auto jetstream::kv::store::purge(std::string key) -> boost::cobalt::task<void> {
-  require_key(key);
-  const auto ack = co_await call(client_, kv_subject(bucket_, key), "",
+auto jetstream::kv::Store::purge(std::string key) -> boost::cobalt::task<void> {
+  requireKey(key);
+  const auto ack = co_await call(client_, kvSubject(bucket_, key), "",
                                  {{"KV-Operation", "PURGE"}, {"Nats-Rollup", "sub"}});
-  revision_of(ack);
+  revisionOf(ack);
   co_return;
 }
 
-jetstream::object_store::store::store(client client, std::string bucket)
+jetstream::ObjectStore::Store::Store(Client client, std::string bucket)
     : client_(std::move(client)), bucket_(std::move(bucket)) {}
 
 namespace {
 
-auto meta_subject(std::string_view bucket, std::string_view name) -> std::string {
-  return "$O." + std::string(bucket) + ".M." + base64_encode(name, true);
+auto metaSubject(std::string_view bucket, std::string_view name) -> std::string {
+  return "$O." + std::string(bucket) + ".M." + base64Encode(name, true);
 }
 
-auto chunk_subject(std::string_view bucket, std::string_view nuid) -> std::string {
+auto chunkSubject(std::string_view bucket, std::string_view nuid) -> std::string {
   return "$O." + std::string(bucket) + ".C." + std::string(nuid);
 }
 
-auto get_message(client& connection, std::string stream, std::string body)
-    -> boost::cobalt::task<std::optional<stored_message>> {
+auto getMessage(Client& connection, std::string stream, std::string body)
+    -> boost::cobalt::task<std::optional<StoredMessage>> {
   const auto response = co_await call(connection, "$JS.API.STREAM.MSG.GET." + stream, std::move(body));
-  const auto failure = read_api_failure(response);
+  const auto failure = readApiFailure(response);
   if (failure.failed) {
-    if (missing_message(failure)) {
+    if (missingMessage(failure)) {
       co_return std::nullopt;
     }
-    throw error(failure.description);
+    throw Error(failure.description);
   }
-  co_return message_from_get(response);
+  co_return messageFromGet(response);
 }
 
-auto load_object(client& connection, std::string_view bucket, std::string_view name, bool allow_deleted)
-    -> boost::cobalt::task<std::optional<object_meta>> {
+auto loadObject(Client& connection, std::string_view bucket, std::string_view name, bool allow_deleted)
+    -> boost::cobalt::task<std::optional<ObjectMeta>> {
   const auto loaded =
-      co_await get_message(connection, "OBJ_" + std::string(bucket),
-                           std::string("{\"last_by_subj\":\"") + json_escape(meta_subject(bucket, name)) + "\"}");
+      co_await getMessage(connection, "OBJ_" + std::string(bucket),
+                           std::string("{\"last_by_subj\":\"") + jsonEscape(metaSubject(bucket, name)) + "\"}");
   if (!loaded) {
     co_return std::nullopt;
   }
-  auto meta = meta_from_json(loaded->data);
+  auto meta = metaFromJson(loaded->data);
   if (meta.name.empty()) {
     meta.name = std::string(name);
   }
@@ -663,38 +663,38 @@ auto load_object(client& connection, std::string_view bucket, std::string_view n
   co_return meta;
 }
 
-auto purge_subject(client& connection, std::string_view bucket, std::string_view subject) -> boost::cobalt::task<void> {
+auto purgeSubject(Client& connection, std::string_view bucket, std::string_view subject) -> boost::cobalt::task<void> {
   const auto response = co_await call(connection, "$JS.API.STREAM.PURGE.OBJ_" + std::string(bucket),
-                                      std::string("{\"filter\":\"") + json_escape(subject) + "\"}");
-  const auto failure = read_api_failure(response);
+                                      std::string("{\"filter\":\"") + jsonEscape(subject) + "\"}");
+  const auto failure = readApiFailure(response);
   if (failure.failed) {
-    throw error(failure.description);
+    throw Error(failure.description);
   }
   co_return;
 }
 
-auto publish_meta(client& connection, std::string_view bucket, const object_meta& meta, std::string digest)
+auto publishMeta(Client& connection, std::string_view bucket, const ObjectMeta& meta, std::string digest)
     -> boost::cobalt::task<void> {
-  const auto payload = std::string("{\"name\":\"") + json_escape(meta.name) + "\",\"bucket\":\"" + json_escape(bucket) +
-                       "\",\"nuid\":\"" + json_escape(meta.nuid) + "\",\"size\":" + std::to_string(meta.size) +
-                       ",\"chunks\":" + std::to_string(meta.chunks) + ",\"digest\":\"" + json_escape(digest) +
+  const auto payload = std::string("{\"name\":\"") + jsonEscape(meta.name) + "\",\"bucket\":\"" + jsonEscape(bucket) +
+                       "\",\"nuid\":\"" + jsonEscape(meta.nuid) + "\",\"size\":" + std::to_string(meta.size) +
+                       ",\"chunks\":" + std::to_string(meta.chunks) + ",\"digest\":\"" + jsonEscape(digest) +
                        "\",\"deleted\":" + (meta.deleted ? "true" : "false") + "}";
-  const auto ack = co_await call(connection, meta_subject(bucket, meta.name), payload, {{"Nats-Rollup", "sub"}});
-  revision_of(ack);
+  const auto ack = co_await call(connection, metaSubject(bucket, meta.name), payload, {{"Nats-Rollup", "sub"}});
+  revisionOf(ack);
   co_return;
 }
 
 }  // namespace
 
-auto jetstream::object_store::store::put(std::string name, std::string data) -> boost::cobalt::task<object_info> {
+auto jetstream::ObjectStore::Store::put(std::string name, std::string data) -> boost::cobalt::task<ObjectInfo> {
   if (name.empty()) {
-    throw error("object name is required");
+    throw Error("object name is required");
   }
-  const auto previous = co_await load_object(client_, bucket_, name, true);
-  const auto nuid = new_nuid();
-  const auto chunks_subject = chunk_subject(bucket_, nuid);
+  const auto previous = co_await loadObject(client_, bucket_, name, true);
+  const auto nuid = newNuid();
+  const auto chunks_subject = chunkSubject(bucket_, nuid);
 
-  sha256 hash;
+  Sha256 hash;
   std::uint64_t chunks = 0;
   std::exception_ptr chunk_failure;
   try {
@@ -704,7 +704,7 @@ auto jetstream::object_store::store::put(std::string name, std::string data) -> 
       auto piece = data.substr(offset, count);
       hash.update(piece);
       const auto ack = co_await call(client_, chunks_subject, std::move(piece));
-      revision_of(ack);
+      revisionOf(ack);
       ++chunks;
       offset += count;
     }
@@ -713,7 +713,7 @@ auto jetstream::object_store::store::put(std::string name, std::string data) -> 
   }
   if (chunk_failure) {
     try {
-      co_await purge_subject(client_, bucket_, chunks_subject);
+      co_await purgeSubject(client_, bucket_, chunks_subject);
     } catch (...) {
     }
     std::rethrow_exception(chunk_failure);
@@ -721,62 +721,62 @@ auto jetstream::object_store::store::put(std::string name, std::string data) -> 
 
   auto digest_bytes = hash.digest();
   const auto digest =
-      std::string("SHA-256=") + base64_encode(std::string_view(reinterpret_cast<const char*>(digest_bytes.data()),
+      std::string("SHA-256=") + base64Encode(std::string_view(reinterpret_cast<const char*>(digest_bytes.data()),
                                                                digest_bytes.size()),
                                                true);
-  object_meta meta;
+  ObjectMeta meta;
   meta.name = name;
   meta.nuid = nuid;
   meta.size = data.size();
   meta.chunks = chunks;
   std::exception_ptr meta_failure;
   try {
-    co_await publish_meta(client_, bucket_, meta, digest);
+    co_await publishMeta(client_, bucket_, meta, digest);
   } catch (...) {
     meta_failure = std::current_exception();
   }
   if (meta_failure) {
     try {
-      co_await purge_subject(client_, bucket_, chunks_subject);
+      co_await purgeSubject(client_, bucket_, chunks_subject);
     } catch (...) {
     }
     std::rethrow_exception(meta_failure);
   }
 
   if (previous && !previous->deleted && !previous->nuid.empty()) {
-    co_await purge_subject(client_, bucket_, chunk_subject(bucket_, previous->nuid));
+    co_await purgeSubject(client_, bucket_, chunkSubject(bucket_, previous->nuid));
   }
-  co_return object_info{std::move(name), meta.size, meta.chunks};
+  co_return ObjectInfo{std::move(name), meta.size, meta.chunks};
 }
 
-auto jetstream::object_store::store::info(std::string name) -> boost::cobalt::task<object_info> {
+auto jetstream::ObjectStore::Store::info(std::string name) -> boost::cobalt::task<ObjectInfo> {
   if (name.empty()) {
-    throw error("object name is required");
+    throw Error("object name is required");
   }
-  const auto meta = co_await load_object(client_, bucket_, name, false);
+  const auto meta = co_await loadObject(client_, bucket_, name, false);
   if (!meta) {
-    throw error("object not found");
+    throw Error("object not found");
   }
-  co_return object_info{std::move(name), meta->size, meta->chunks};
+  co_return ObjectInfo{std::move(name), meta->size, meta->chunks};
 }
 
-auto jetstream::object_store::store::get(std::string name) -> boost::cobalt::task<std::string> {
+auto jetstream::ObjectStore::Store::get(std::string name) -> boost::cobalt::task<std::string> {
   if (name.empty()) {
-    throw error("object name is required");
+    throw Error("object name is required");
   }
-  const auto meta = co_await load_object(client_, bucket_, name, false);
+  const auto meta = co_await loadObject(client_, bucket_, name, false);
   if (!meta) {
-    throw error("object not found");
+    throw Error("object not found");
   }
   if (meta->chunks == 0 || meta->size == 0) {
     co_return std::string{};
   }
 
   const auto stream = "OBJ_" + bucket_;
-  const auto subject = chunk_subject(bucket_, meta->nuid);
-  auto current = co_await get_message(client_, stream, std::string("{\"next_by_subj\":\"") + json_escape(subject) + "\"}");
+  const auto subject = chunkSubject(bucket_, meta->nuid);
+  auto current = co_await getMessage(client_, stream, std::string("{\"next_by_subj\":\"") + jsonEscape(subject) + "\"}");
   if (!current) {
-    throw error("object chunks not found");
+    throw Error("object chunks not found");
   }
 
   std::string data = std::move(current->data);
@@ -786,9 +786,9 @@ auto jetstream::object_store::store::get(std::string name) -> boost::cobalt::tas
   while (found < meta->chunks) {
     ++sequence;
     if (++misses > 64) {
-      throw error("object chunks are incomplete");
+      throw Error("object chunks are incomplete");
     }
-    auto next = co_await get_message(client_, stream, std::string("{\"seq\":") + std::to_string(sequence) + "}");
+    auto next = co_await getMessage(client_, stream, std::string("{\"seq\":") + std::to_string(sequence) + "}");
     if (!next) {
       continue;
     }
@@ -801,32 +801,32 @@ auto jetstream::object_store::store::get(std::string name) -> boost::cobalt::tas
   co_return data;
 }
 
-auto jetstream::object_store::store::delete_(std::string name) -> boost::cobalt::task<void> {
+auto jetstream::ObjectStore::Store::remove(std::string name) -> boost::cobalt::task<void> {
   if (name.empty()) {
-    throw error("object name is required");
+    throw Error("object name is required");
   }
-  const auto meta = co_await load_object(client_, bucket_, name, true);
+  const auto meta = co_await loadObject(client_, bucket_, name, true);
   if (!meta) {
-    throw error("object not found");
+    throw Error("object not found");
   }
   auto marker = *meta;
   marker.deleted = true;
   marker.size = 0;
   marker.chunks = 0;
-  co_await publish_meta(client_, bucket_, marker, "");
+  co_await publishMeta(client_, bucket_, marker, "");
   if (!meta->nuid.empty()) {
-    co_await purge_subject(client_, bucket_, chunk_subject(bucket_, meta->nuid));
+    co_await purgeSubject(client_, bucket_, chunkSubject(bucket_, meta->nuid));
   }
   co_return;
 }
 
-jetstream::context::context(client client) : client_(std::move(client)) {}
+jetstream::Context::Context(Client client) : client_(std::move(client)) {}
 
-auto jetstream::context::create_key_value(jetstream::kv::config config) -> boost::cobalt::task<jetstream::kv::store> {
-  require_bucket(config.bucket);
+auto jetstream::Context::createKeyValue(jetstream::kv::Config config) -> boost::cobalt::task<jetstream::kv::Store> {
+  requireBucket(config.bucket);
   auto history = config.history < 1 ? std::int64_t{1} : config.history;
   if (history > 64) {
-    throw error("history must be between 1 and 64");
+    throw Error("history must be between 1 and 64");
   }
   const auto body = std::string("{\"name\":\"KV_") + config.bucket + "\",\"subjects\":[\"$KV." + config.bucket +
                     ".>\"],\"retention\":\"limits\",\"max_consumers\":-1,\"max_msgs\":-1,\"max_bytes\":-1,"
@@ -836,56 +836,56 @@ auto jetstream::context::create_key_value(jetstream::kv::config config) -> boost
                     "\"duplicate_window\":120000000000,\"allow_rollup_hdrs\":true,\"deny_delete\":true,"
                     "\"allow_direct\":true}";
   const auto response = co_await call(client_, "$JS.API.STREAM.CREATE.KV_" + config.bucket, body);
-  const auto failure = read_api_failure(response);
+  const auto failure = readApiFailure(response);
   if (failure.failed) {
-    throw error(failure.description);
+    throw Error(failure.description);
   }
-  co_return jetstream::kv::store{client_, std::move(config.bucket)};
+  co_return jetstream::kv::Store{client_, std::move(config.bucket)};
 }
 
-auto jetstream::context::get_key_value(std::string bucket) -> boost::cobalt::task<jetstream::kv::store> {
-  require_bucket(bucket);
+auto jetstream::Context::getKeyValue(std::string bucket) -> boost::cobalt::task<jetstream::kv::Store> {
+  requireBucket(bucket);
   const auto response = co_await call(client_, "$JS.API.STREAM.INFO.KV_" + bucket, "{}");
-  const auto failure = read_api_failure(response);
+  const auto failure = readApiFailure(response);
   if (failure.failed) {
-    if (missing_message(failure)) {
-      throw error("bucket not found");
+    if (missingMessage(failure)) {
+      throw Error("bucket not found");
     }
-    throw error(failure.description);
+    throw Error(failure.description);
   }
-  co_return jetstream::kv::store{client_, std::move(bucket)};
+  co_return jetstream::kv::Store{client_, std::move(bucket)};
 }
 
-auto jetstream::context::create_object_store(jetstream::object_store::config config) -> boost::cobalt::task<jetstream::object_store::store> {
-  require_bucket(config.bucket);
+auto jetstream::Context::createObjectStore(jetstream::ObjectStore::Config config) -> boost::cobalt::task<jetstream::ObjectStore::Store> {
+  requireBucket(config.bucket);
   const auto body = std::string("{\"name\":\"OBJ_") + config.bucket + "\",\"subjects\":[\"$O." + config.bucket +
                     ".C.>\",\"$O." + config.bucket +
                     ".M.>\"],\"retention\":\"limits\",\"max_consumers\":-1,\"max_msgs\":-1,\"max_bytes\":-1,"
                     "\"discard\":\"new\",\"max_age\":0,\"storage\":\"file\",\"num_replicas\":1,"
                     "\"allow_rollup_hdrs\":true,\"allow_direct\":true}";
   const auto response = co_await call(client_, "$JS.API.STREAM.CREATE.OBJ_" + config.bucket, body);
-  const auto failure = read_api_failure(response);
+  const auto failure = readApiFailure(response);
   if (failure.failed) {
-    throw error(failure.description);
+    throw Error(failure.description);
   }
-  co_return jetstream::object_store::store{client_, std::move(config.bucket)};
+  co_return jetstream::ObjectStore::Store{client_, std::move(config.bucket)};
 }
 
-auto jetstream::context::get_object_store(std::string bucket) -> boost::cobalt::task<jetstream::object_store::store> {
-  require_bucket(bucket);
+auto jetstream::Context::getObjectStore(std::string bucket) -> boost::cobalt::task<jetstream::ObjectStore::Store> {
+  requireBucket(bucket);
   const auto response = co_await call(client_, "$JS.API.STREAM.INFO.OBJ_" + bucket, "{}");
-  const auto failure = read_api_failure(response);
+  const auto failure = readApiFailure(response);
   if (failure.failed) {
-    if (missing_message(failure)) {
-      throw error("bucket not found");
+    if (missingMessage(failure)) {
+      throw Error("bucket not found");
     }
-    throw error(failure.description);
+    throw Error(failure.description);
   }
-  co_return jetstream::object_store::store{client_, std::move(bucket)};
+  co_return jetstream::ObjectStore::Store{client_, std::move(bucket)};
 }
 
-auto jetstream::make(client client) -> boost::cobalt::task<context> {
-  co_return context{std::move(client)};
+auto jetstream::make(Client client) -> boost::cobalt::task<Context> {
+  co_return Context{std::move(client)};
 }
 
-}  // namespace async_nats
+}  // namespace AsyncNats

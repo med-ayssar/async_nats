@@ -1,53 +1,59 @@
-# How async_nats runs
+# How AsyncNats runs
 
-The library owns process startup. An application supplies `co_main`. One IO thread reads and writes each NATS socket. A subscription either runs a handler for every message, or a caller waits on `next()` until one message is ready. Connection failures and `SIGINT` / `SIGTERM` both end that wait by resuming it with an `async_nats::error`.
+The library owns process startup. An application supplies `coMain`. One IO thread reads and writes each NATS socket. A subscription either runs a handler for every message, or a caller waits on `next()` until one message is ready. Connection failures and `SIGINT` / `SIGTERM` both end that wait by resuming it with an `AsyncNats::Error`.
 
 The pieces live in:
 
-- `src/async_nats/main.cpp` — process `main`
-- `src/async_nats/event_loop.cpp` — runtime startup and signals
-- `src/async_nats/client.cpp` — connect, read loop, subscribe, wait, close
-- `src/async_nats/session.hpp` — private helpers used by the event loop
-- `src/async_nats/include/async_nats.h` — the public declarations
+- `src/async_nats/core/main.cpp` — process `main`
+- `src/async_nats/core/event_loop.cpp` — runtime startup and signals
+- `src/async_nats/core/core.cpp` — the `Core` singleton
+- `src/async_nats/core/include/AsyncNats/Core.h` — public runtime
+- `src/async_nats/client/client.cpp` — connect, read loop, subscribe, wait, close
+- `src/async_nats/client/jetstream.cpp` — JetStream, key-value, and the object store
+- `src/async_nats/client/session.hpp` — private helpers used by the event loop
+- `src/async_nats/client/include/AsyncNats.h` — the public client declarations
+- `src/async_nats/utils/thread_count.hpp` — worker-pool size
+
+`session.hpp` stays beside the client. `reportError`, `closeAllClients`, `requestStop`, and `stopRequested` are friends of `Client` and are defined in `client.cpp`. `thread_count` only parses `NATS_EVENT_LOOP_WORKER_THREADS`, so it lives under `utils`. The website for this API is the Astro site in `docs/site`. From the repository root, `./doc.sh` shells into `.#doc`, builds that site, and serves it at <http://127.0.0.1:4321/>.
 
 ## Startup
 
-`main` builds an `event_loop`, calls `setup()`, then `run()`:
+`main` builds an `EventLoop`, calls `setup()`, then `run()`:
 
 ```cpp
 auto main(int argc, char* argv[]) -> int {
-  async_nats::event_loop loop;
+  AsyncNats::EventLoop loop;
   loop.setup();
   return loop.run(argc, argv);
 }
 ```
 
-`setup()` starts the `core` singleton:
+`setup()` starts the `Core` singleton:
 
 - one thread running `io_context::run()`
 - a `boost::asio::thread_pool` sized by `NATS_EVENT_LOOP_WORKER_THREADS` (default 1)
 
-Socket work stays on that one IO thread, on a strand, with one outstanding read and one outstanding write. `io_threads()` returns 1. `worker_threads()` reports the pool size. `thread_pool()` is the pool for blocking work posted with `boost::asio::post`.
+Socket work stays on that one IO thread, on a strand, with one outstanding read and one outstanding write. `ioThreads()` returns 1. `workerThreads()` reports the pool size. `threadPool()` is the pool for blocking work posted with `boost::asio::post`.
 
 `run()` does three things on that `io_context`:
 
-1. Arm a `signal_set` for `SIGINT` and `SIGTERM`, and spawn `watch_signals`.
-2. Spawn the user's `co_main`.
-3. When `co_main` finishes, cancel the signal set, stop the IO thread, join it, and return 0.
+1. Arm a `signal_set` for `SIGINT` and `SIGTERM`, and spawn `watchSignals`.
+2. Spawn the user's `coMain`.
+3. When `coMain` finishes, cancel the signal set, stop the IO thread, join it, and return 0.
 
-The integer `co_main` returns is only logged (`co_main returned N`). The process exit code is 0 unless an exception escapes `co_main`, in which case the event loop logs `Exception ...` and still returns 0.
+The integer `coMain` returns is only logged (`coMain returned N`). The process exit code is 0 unless an exception escapes `coMain`, in which case the event loop logs `Exception ...` and still returns 0.
 
-`async_nats::main` is `boost::cobalt::task<int>`. Register `on_error` before the first `co_await` inside `co_main`.
+`AsyncNats::Main` is `boost::cobalt::task<int>`. Register `onError` before the first `co_await` inside `coMain`.
 
 ## Connect
 
-`connect` resolves the host, opens TCP, reads the server `INFO`, sends `CONNECT` and `PING`, and waits for `PONG`. After that handshake it records the connection and spawns `read_loop` on the socket's strand. `read_loop` is the only reader for the life of the socket.
+`connect` resolves the host, opens TCP, reads the server `INFO`, sends `CONNECT` and `PING`, and waits for `PONG`. After that handshake it records the connection and spawns `readLoop` on the socket's strand. `readLoop` is the only reader for the life of the socket.
 
-`read_loop` waits for the next protocol line:
+`readLoop` waits for the next protocol line:
 
 - `PING` is answered with `PONG`
 - `MSG` and `HMSG` are parsed and passed to `deliver`
-- a line that starts with `-ERR` becomes an `async_nats::error` of kind `other`
+- a line that starts with `-ERR` becomes an `AsyncNats::Error` of kind `other`
 - any other line is skipped
 
 `connect` also checks a process-wide stop flag before resolve, after resolve, after TCP connect, and after the handshake. A signal that arrives during connect sets that flag. `connect` then closes the new socket and throws kind `signal` instead of tracking another client.
@@ -66,7 +72,7 @@ The application then waits on the connection:
 
 ```cpp
 co_await client.subscribe({
-    {"Grok", [](async_nats::message message) -> boost::cobalt::task<void> {
+    {"Grok", [](AsyncNats::Message message) -> boost::cobalt::task<void> {
        spdlog::info("received {} on {}", message.payload, message.subject);
        co_return;
      }},
@@ -94,14 +100,14 @@ A later `deliver` with no route handler resumes that waiter and gives it the mes
 
 ## How errors are handled
 
-Every failure the library reports is an `async_nats::error`. `kind()` is one of:
+Every failure the library reports is an `AsyncNats::Error`. `kind()` is one of:
 
 | What happened | Kind | What the library does |
 |---|---|---|
-| Resolve or TCP connect fails | `unreachable` | Log, run `on_error`, then `connect` throws |
-| The socket dies, the peer sends EOF, or the handshake gets `-ERR` or no `INFO` | `interrupted` | Log, run `on_error`, fail waiters, throw |
-| `client::close()` | `closed` | Resume waiters. No log and no `on_error` |
-| `SIGINT` or `SIGTERM` | `signal` | Close tracked clients first, then log and run `on_error` |
+| Resolve or TCP connect fails | `unreachable` | Log, run `onError`, then `connect` throws |
+| The socket dies, the peer sends EOF, or the handshake gets `-ERR` or no `INFO` | `interrupted` | Log, run `onError`, fail waiters, throw |
+| `Client::close()` | `closed` | Resume waiters. No log and no `onError` |
+| `SIGINT` or `SIGTERM` | `signal` | Close tracked clients first, then log and run `onError` |
 | A `-ERR` on a live connection, or a programming mistake such as a missing client | `other` | Log and report when it comes from the read loop. An application can rethrow this one |
 
 The messages are:
@@ -110,47 +116,47 @@ The messages are:
 - `connection to NATS server host:port was interrupted: ...`
 - `received SIGINT, closing NATS client` or `received SIGTERM, closing NATS client`
 
-The shared wake-up is `fail_waiters`. The first call sticks: it stores the reason and kind, marks the connection failed, and resumes every parked `next()` and every `closed()`. A later failure does not replace that reason. `operation_aborted` is ignored, because that is the library cancelling the socket itself during shutdown.
+The shared wake-up is `failWaiters`. The first call sticks: it stores the reason and kind, marks the connection failed, and resumes every parked `next()` and every `closed()`. A later failure does not replace that reason. `operation_aborted` is ignored, because that is the library cancelling the socket itself during shutdown.
 
-`report_error` logs first (`spdlog::error`, or `spdlog::info` for a signal). Kind `closed` is not logged. It then runs the handler registered with `on_error`, unless that handler is already on the stack. A handler that throws is logged as `nats error handler failed` and does not escape.
+`reportError` logs first (`spdlog::error`, or `spdlog::info` for a signal). Kind `closed` is not logged. It then runs the handler registered with `onError`, unless that handler is already on the stack. A handler that throws is logged as `nats error handler failed` and does not escape.
 
-A write that fails for a reason other than `operation_aborted` becomes kind `interrupted`: waiters are failed, `on_error` runs, and the write throws. The read loop does the same for EOF, reset, and any other exception that is not an abort.
+A write that fails for a reason other than `operation_aborted` becomes kind `interrupted`: waiters are failed, `onError` runs, and the write throws. The read loop does the same for EOF, reset, and any other exception that is not an abort.
 
-`client::close()` calls `shutdown("connection closed", error_kind::closed)`. That cancels the socket, shuts it down, closes it, clears handlers and routes, and runs `fail_waiters`. It does not call `report_error`. A waiting `closed()` or `next()` then throws kind `closed`.
+`Client::close()` calls `shutdown("connection closed", ErrorKind::closed)`. That cancels the socket, shuts it down, closes it, clears handlers and routes, and runs `failWaiters`. It does not call `reportError`. A waiting `closed()` or `next()` then throws kind `closed`.
 
 An application that wants the library log to be enough, and still wants programming errors to surface, looks like this:
 
 ```cpp
 try {
-  auto client = co_await async_nats::connect(url);
+  auto client = co_await AsyncNats::connect(url);
   co_await client.subscribe({/* routes */});
   co_await client.closed();
-} catch (const async_nats::error& failure) {
-  if (failure.kind() == async_nats::error_kind::other) {
+} catch (const AsyncNats::Error& failure) {
+  if (failure.kind() == AsyncNats::ErrorKind::other) {
     throw;
   }
 }
 co_return 0;
 ```
 
-Unreachable, interrupted, closed, and signal are already visible through the log and `on_error`, so `co_main` can return 0. Kind `other` is rethrown, and the event loop logs it.
+Unreachable, interrupted, closed, and signal are already visible through the log and `onError`, so `coMain` can return 0. Kind `other` is rethrown, and the event loop logs it.
 
 ## How signals are caught
 
-`watch_signals` is already waiting before `co_main` starts. It waits once on the `signal_set`. `SIGKILL` cannot be caught. A normal exit cancels the set; the wait completes with `operation_aborted`, and the watcher returns without closing clients or logging.
+`watchSignals` is already waiting before `coMain` starts. It waits once on the `signal_set`. `SIGKILL` cannot be caught. A normal exit cancels the set; the wait completes with `operation_aborted`, and the watcher returns without closing clients or logging.
 
 On `SIGINT` or `SIGTERM` the watcher:
 
 1. Sets the process-wide stop flag, so a `connect` still in progress throws kind `signal` instead of tracking a new socket.
-2. Closes every tracked client. That cancels the socket, shuts it down, and runs `fail_waiters` with kind `signal`. A parked `closed()` or `next()` resumes and throws.
+2. Closes every tracked client. That cancels the socket, shuts it down, and runs `failWaiters` with kind `signal`. A parked `closed()` or `next()` resumes and throws.
 3. Logs `received SIGINT, closing NATS client` or the `SIGTERM` line.
-4. Runs `on_error`.
+4. Runs `onError`.
 
-The clients are already closed before the callback runs. The callback does its extra work and returns. Waiting on `closed()` again from inside the callback throws the signal error into the handler, and `report_error` logs that as `nats error handler failed`.
+The clients are already closed before the callback runs. The callback does its extra work and returns. Waiting on `closed()` again from inside the callback throws the signal error into the handler, and `reportError` logs that as `nats error handler failed`.
 
 ```cpp
-async_nats::on_error([](async_nats::error failure) -> boost::cobalt::task<void> {
-  if (failure.kind() == async_nats::error_kind::signal) {
+AsyncNats::onError([](AsyncNats::Error failure) -> boost::cobalt::task<void> {
+  if (failure.kind() == AsyncNats::ErrorKind::signal) {
     spdlog::info("shutting down");
   }
   co_return;

@@ -1,5 +1,5 @@
 {
-  description = "async_nats";
+  description = "AsyncNats";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -88,10 +88,13 @@
         clangRelease = packageFor system "clang" "release" false;
         gccRelease = packageFor system "gcc" "release" false;
         tests = packageFor system "clang" "release" true;
+        docPkgs = import nixpkgs { inherit system; };
+        doc = docPkgs.callPackage ./nix/doc.nix { };
       in
       {
         packages = {
           default = clangRelease;
+          doc = doc;
           "async-nats-clang-release" = clangRelease;
           "async-nats-clang-debug" = packageFor system "clang" "debug" false;
           "async-nats-gcc-release" = gccRelease;
@@ -108,6 +111,12 @@
           "async-nats-gcc" = shellFor system "gcc";
           clang = shellFor system "clang";
           gcc = shellFor system "gcc";
+          doc = docPkgs.mkShell {
+            packages = [
+              docPkgs.nodejs
+              doc
+            ];
+          };
         };
       }
     )
