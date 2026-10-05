@@ -54,7 +54,6 @@ BUILD_DIR="${SCRIPT_DIR}/build/${COMPILER}"
 nix develop ".#async-nats-${COMPILER}" -c cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  -DASYNC_NATS_BUILD_SAMPLE=OFF \
   -DBUILD_TESTS=ON
 # CMake asks the Nix compiler which include directories it searches on its own.
 # It then omits those directories from compile_commands.json. Homebrew clangd

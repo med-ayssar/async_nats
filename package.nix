@@ -57,7 +57,6 @@ stdenv.mkDerivation {
     "-DCMAKE_CXX_STANDARD=23"
     "-DCMAKE_CXX_STANDARD_REQUIRED=ON"
     "-DCMAKE_CXX_EXTENSIONS=OFF"
-    "-DASYNC_NATS_BUILD_SAMPLE=OFF"
   ]
   ++ lib.optionals withTests [
     "-DBUILD_TESTS=ON"
