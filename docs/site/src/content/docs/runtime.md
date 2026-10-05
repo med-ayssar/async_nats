@@ -57,7 +57,7 @@ The source files are:
 
 `subscribe` with a list of `{subject, handler}` pairs assigns a subscription id to each route, stores the handler, and writes one `SUB` frame per route. This call does not wait for a message.
 
-When `deliver` finds a handler for that id, it starts the handler with `boost::cobalt::spawn` and returns. It does not `co_await` the handler, so a slow handler does not stall the read loop. If the handler throws, the exception is logged as `nats handler failed` and the connection stays up.
+When `deliver` finds a handler for that id, it starts the handler with `boost::cobalt::spawn` on the worker pool and returns. It does not `co_await` the handler, so a slow handler does not stall the read loop. Client calls inside the handler move back to the socket strand before they touch the socket. If the handler throws, the exception is logged as `nats handler failed` and the connection stays up.
 
 The application then waits on the connection with `co_await client.closed()`. Every message until then is a separate spawned handler.
 

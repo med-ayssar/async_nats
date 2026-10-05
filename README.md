@@ -52,7 +52,7 @@ AsyncNats::onError([](AsyncNats::Error failure) -> boost::cobalt::task<void> {
 });
 ```
 
-`subscribe` also accepts a list of routes. Each route is a subject and a handler. A message on that subject starts the handler. `unsubscribe` takes the subjects to remove.
+`subscribe` also accepts a list of routes. Each route is a subject and a handler. A message on that subject starts the handler on the worker pool. `unsubscribe` takes the subjects to remove.
 
 ```cpp
 co_await client.subscribe({

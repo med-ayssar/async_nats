@@ -101,9 +101,10 @@ struct Message {
 /**
  * @brief Coroutine started for each message on a route subscription.
  *
- * The read loop starts the handler and does not wait for it. A slow handler
- * does not stall the socket. A thrown exception is logged and the connection
- * stays up.
+ * The read loop starts the handler on the worker pool and does not wait for
+ * it. A slow handler does not stall the socket. Client calls from the handler
+ * return to the IO thread before they touch the socket. A thrown exception is
+ * logged and the connection stays up.
  */
 using MessageHandler = std::function<boost::cobalt::task<void>(Message)>;
 

@@ -1,4 +1,5 @@
 #include <AsyncNats.h>
+#include <AsyncNats/Core.h>
 
 #include "session.hpp"
 
@@ -253,16 +254,17 @@ struct Client::Impl {
     if (auto route = handlers.find(incoming.sid); route != handlers.end()) {
       try {
         auto handled = route->second(std::move(incoming.message));
-        boost::cobalt::spawn(socket.get_executor(), std::move(handled), [](std::exception_ptr exception) {
-          if (!exception) {
-            return;
-          }
-          try {
-            std::rethrow_exception(exception);
-          } catch (const std::exception& ex) {
-            spdlog::error("nats handler failed: {}", ex.what());
-          }
-        });
+        boost::cobalt::spawn(
+            Core::instance().threadPool().get_executor(), std::move(handled), [](std::exception_ptr exception) {
+              if (!exception) {
+                return;
+              }
+              try {
+                std::rethrow_exception(exception);
+              } catch (const std::exception& ex) {
+                spdlog::error("nats handler failed: {}", ex.what());
+              }
+            });
       } catch (const std::exception& ex) {
         spdlog::error("nats handler failed: {}", ex.what());
       }

@@ -43,7 +43,7 @@ co_await client.subscribe({
 co_await client.unsubscribe({"Grok"});
 ```
 
-Each route is a subject and a `MessageHandler`. The handler is `task<void>(message)`. The read loop starts it and does not wait, so a slow handler does not stall the socket. A thrown handler is logged and the connection stays up.
+Each route is a subject and a `MessageHandler`. The handler is `task<void>(message)`. The read loop starts it on the worker pool and does not wait, so a slow handler does not stall the socket. Client calls from the handler return to the IO thread before they touch the socket. A thrown handler is logged and the connection stays up.
 
 An empty route list does nothing. Duplicate subjects become separate subscriptions. `unsubscribe` sends `UNSUB` for every route on those subjects and drops the handlers. Unknown subjects are skipped.
 

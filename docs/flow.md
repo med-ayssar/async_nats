@@ -66,7 +66,7 @@ There are two subscribe paths.
 
 `subscribe` with a list of `{subject, handler}` pairs assigns a subscription id (`sid`) to each route, stores the handler under that id, and writes one `SUB` frame per route. This call does not wait for a message. If the write fails, the routes just added are dropped and the error propagates.
 
-When `deliver` finds a handler for that sid, it starts the handler with `boost::cobalt::spawn` and returns. It does not `co_await` the handler, so a slow handler does not stall the read loop. If the handler throws, the exception is logged as `nats handler failed` and the connection stays up.
+When `deliver` finds a handler for that sid, it starts the handler with `boost::cobalt::spawn` on `Core::threadPool()` and returns. It does not `co_await` the handler, so a slow handler does not stall the read loop. Client calls inside the handler move back to the socket strand before they touch the socket. If the handler throws, the exception is logged as `nats handler failed` and the connection stays up.
 
 The application then waits on the connection:
 
