@@ -1,4 +1,4 @@
-#include "thread_count.hpp"
+#include "ThreadCount.h"
 
 #include <spdlog/spdlog.h>
 

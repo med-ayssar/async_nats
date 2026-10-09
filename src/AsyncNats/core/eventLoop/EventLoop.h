@@ -18,8 +18,8 @@ class EventLoop {
   void setup();
 
   /**
-   * @brief Run `coMain` and the signal watcher.
-   * @return 0. The integer `coMain` returns is only logged.
+   * @brief Run `co_main` and the signal watcher.
+   * @return 0. The integer `co_main` returns is only logged.
    */
   auto run(int argc, char** argv) -> int;
 

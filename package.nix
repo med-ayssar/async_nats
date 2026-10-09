@@ -74,7 +74,7 @@ stdenv.mkDerivation {
   '';
 
   meta = {
-    description = "Async NATS client runtime. The library owns main and runs coMain.";
+    description = "Async NATS client runtime. The library owns main and runs co_main.";
     license = lib.licenses.mit;
   };
 }

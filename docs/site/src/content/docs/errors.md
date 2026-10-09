@@ -30,11 +30,11 @@ AsyncNats::onError([](AsyncNats::Error failure) -> boost::cobalt::task<void> {
 });
 ```
 
-Call `onError` before the first `co_await` in `coMain`. Kind `closed` does not run the handler. A handler that is already on the stack is not entered again. An empty handler clears the previous one. A handler that throws is logged as `nats error handler failed`.
+Call `onError` before the first `co_await` in `co_main`. Kind `closed` does not run the handler. A handler that is already on the stack is not entered again. An empty handler clears the previous one. A handler that throws is logged as `nats error handler failed`.
 
 ## Signals
 
-`watchSignals` is already waiting before `coMain` starts. `SIGKILL` cannot be caught. A normal exit cancels the signal set; the wait completes with `operation_aborted`, and the watcher returns without closing clients.
+`watchSignals` is already waiting before `co_main` starts. `SIGKILL` cannot be caught. A normal exit cancels the signal set; the wait completes with `operation_aborted`, and the watcher returns without closing clients.
 
 On `SIGINT` or `SIGTERM` the watcher:
 

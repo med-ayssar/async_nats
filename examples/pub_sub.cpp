@@ -4,7 +4,7 @@
 
 #include <cstdlib>
 
-AsyncNats::Main coMain(int, char**) {
+AsyncNats::Main co_main(int, char**) {
   const char* url = std::getenv("NATS_URL");
   auto client = co_await AsyncNats::connect(url != nullptr ? url : "nats://127.0.0.1:4222");
 

@@ -1,6 +1,6 @@
-#include "event_loop.hpp"
+#include "EventLoop.h"
 
-#include "session.hpp"
+#include "Session.h"
 
 #include <AsyncNats.h>
 #include <AsyncNats/Core.h>
@@ -73,7 +73,7 @@ auto EventLoop::run(int argc, char** argv) -> int {
     }
   });
 
-  boost::cobalt::spawn(runtime.ioContext(), coMain(argc, argv), [&](std::exception_ptr exception, int result) {
+  boost::cobalt::spawn(runtime.ioContext(), co_main(argc, argv), [&](std::exception_ptr exception, int result) {
     if (exception) {
       try {
         std::rethrow_exception(exception);
@@ -81,7 +81,7 @@ auto EventLoop::run(int argc, char** argv) -> int {
         spdlog::error("Exception {}\n", error.what());
       }
     } else {
-      spdlog::info("coMain returned {}", result);
+      spdlog::info("co_main returned {}", result);
     }
 
     if (impl_->signals) {

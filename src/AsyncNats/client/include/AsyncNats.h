@@ -2,7 +2,7 @@
  * @file AsyncNats.h
  * @brief NATS client, JetStream key-value store, and object store.
  *
- * The library owns process `main`. The application defines `coMain` and links
+ * The library owns process `main`. The application defines `co_main` and links
  * `AsyncNats::AsyncNats`. This header is the client API. The IO runtime is
  * `<AsyncNats/Core.h>`.
  *
@@ -25,7 +25,7 @@
 
 namespace AsyncNats {
 
-/** @brief Return type of `coMain`. */
+/** @brief Return type of `co_main`. */
 using Main = boost::cobalt::task<int>;
 
 /**
@@ -79,7 +79,7 @@ using ErrorHandler = std::function<boost::cobalt::task<void>(Error)>;
 /**
  * @brief Register the process-wide error handler.
  *
- * Call this before the first `co_await` in `coMain`. Kind `closed` does not
+ * Call this before the first `co_await` in `co_main`. Kind `closed` does not
  * run the handler. A handler that is already on the stack is not entered
  * again. An empty handler clears the previous one.
  *
@@ -460,4 +460,4 @@ auto make(Client client) -> boost::cobalt::task<Context>;
  * integer is logged. The process exits 0 unless an exception escapes.
  * Register `AsyncNats::onError` before the first `co_await`.
  */
-auto coMain(int argc, char** argv) -> AsyncNats::Main;
+auto co_main(int argc, char** argv) -> AsyncNats::Main;

@@ -1,8 +1,8 @@
 /**
- * @file session.hpp
+ * @file Session.h
  * @brief Private bridge between the event loop and `Client`.
  *
- * These functions are friends of `Client` and are defined in `client.cpp`.
+ * These functions are friends of `Client` and are defined in `Client.cpp`.
  * They are not installed.
  */
 #pragma once

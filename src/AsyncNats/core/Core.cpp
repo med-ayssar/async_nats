@@ -1,6 +1,6 @@
 #include <AsyncNats/Core.h>
 
-#include "thread_count.hpp"
+#include "utils/ThreadCount.h"
 
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>

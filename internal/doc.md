@@ -2,24 +2,24 @@
 
 This note is for reading the implementation later. The same text is the Astro page [Core implementation overview](../docs/site/src/content/docs/implementation.md). The shorter public walkthrough is `docs/flow.md`. This file follows the same path further into the source, then explains `packageFor` and `shellFor` in `flake.nix` and the matching functions in the docktopus flake.
 
-The library owns process `main`. An application defines `coMain` and links `AsyncNats::AsyncNats`. `AsyncNats::Main` is `boost::cobalt::task<int>`. The public client header is `<AsyncNats.h>`. The runtime header is `<AsyncNats/Core.h>`.
+The library owns process `main`. An application defines `co_main` and links `AsyncNats::AsyncNats`. `AsyncNats::Main` is `boost::cobalt::task<int>`. The public client header is `<AsyncNats.h>`. The runtime header is `<AsyncNats/Core.h>`.
 
 ## What is compiled
 
-CMake lists sources by hand in the repository `CMakeLists.txt`. The unused trees `src/async_nats/core/client` and `src/async_nats/core/error` stay out of the build. The nested `src/async_nats/CMakeLists.txt` is also unused.
+CMake lists sources by hand in the repository `CMakeLists.txt`.
 
 | Target | Sources | Role |
 |---|---|---|
-| `AsyncNatsObjects` | `client/client.cpp`, `client/jetstream.cpp`, `core/core.cpp`, `utils/thread_count.cpp` | The client and the runtime, with no `main`. Tests link this. |
-| `AsyncNats` | `core/main.cpp`, `core/event_loop.cpp`, plus the objects above | The static library an application links. It supplies `main`. |
+| `AsyncNatsObjects` | `client/Client.cpp`, `client/JetStream.cpp`, `core/Core.cpp`, `core/utils/ThreadCount.cpp` | The client and the runtime, with no `main`. Tests link this. |
+| `AsyncNats` | `core/Main.cpp`, `core/eventLoop/EventLoop.cpp`, plus the objects above | The static library an application links. It supplies `main`. |
 
-The static library takes those objects with `$<TARGET_OBJECTS:AsyncNatsObjects>` and `add_dependencies`. It does not `target_link_libraries` the object library. Public include directories are `client/include` and `core/include`. Private include directories add `client`, `core`, and `utils`, which is why `"event_loop.hpp"`, `"session.hpp"`, and `"thread_count.hpp"` resolve. Installed names are `libAsyncNats.a`, `include/AsyncNats.h`, `include/AsyncNats/Core.h`, and `lib/cmake/AsyncNats/`.
+The static library takes those objects with `$<TARGET_OBJECTS:AsyncNatsObjects>` and `add_dependencies`. It does not `target_link_libraries` the object library. Public include directories are `client/include` and `core/include`. Private include directories add `client` and `core`, which is why `"Session.h"`, `"eventLoop/EventLoop.h"`, and `"utils/ThreadCount.h"` resolve. Installed names are `libAsyncNats.a`, `include/AsyncNats.h`, `include/AsyncNats/Core.h`, and `lib/cmake/AsyncNats/`.
 
-`session.hpp` stays in `client/` because `reportError`, `closeAllClients`, `requestStop`, and `stopRequested` are friends of `Client` and are defined in `client.cpp`. They are not installed. `thread_count` only parses the worker-pool size, so it lives in `utils`.
+`Session.h` stays in `client/` because `reportError`, `closeAllClients`, `requestStop`, and `stopRequested` are friends of `Client` and are defined in `Client.cpp`. They are not installed. `ThreadCount` only parses the worker-pool size, so it lives in `core/utils`.
 
 ## Two executors
 
-`Core::instance()` is a process-wide singleton, built on the first call from `EventLoop::setup()`. Its state is in `core/core.cpp`.
+`Core::instance()` is a process-wide singleton, built on the first call from `EventLoop::setup()`. Its state is in `core/Core.cpp`.
 
 One `std::thread` runs `io_context::run()`. A work guard keeps that `run()` from returning while the context is idle. `ioThreads()` always returns 1. `NATS_EVENT_LOOP_IO_THREADS` is not read.
 
@@ -41,7 +41,7 @@ Cobalt tasks are lazy. Calling a handler builds the coroutine frame and does not
 
 ## Startup
 
-`core/main.cpp` is the whole process entry point:
+`core/Main.cpp` is the whole process entry point:
 
 ```cpp
 auto main(int argc, char* argv[]) -> int {
@@ -55,11 +55,11 @@ auto main(int argc, char* argv[]) -> int {
 
 1. Builds a `signal_set` on the IO context for `SIGINT` and `SIGTERM`.
 2. Spawns `watchSignals` on that context. Its completion only logs `signal handler failed` if the watcher throws.
-3. Spawns `coMain(argc, argv)` on the same context. The completion logs `coMain returned N`, or `Exception ...` if `coMain` throws.
+3. Spawns `co_main(argc, argv)` on the same context. The completion logs `co_main returned N`, or `Exception ...` if `co_main` throws.
 4. Cancels the signal set, calls `release()`, and fulfills a `std::promise`.
 5. The thread that called `run()` blocks on that promise, then `join()`s the IO thread and returns 0.
 
-The integer from `coMain` is only logged. The process exit code from `run()` is 0 whether `coMain` returned or threw. Register `onError` before the first `co_await` inside `coMain`, because the watcher is already waiting when `coMain` starts.
+The integer from `co_main` is only logged. The process exit code from `run()` is 0 whether `co_main` returned or threw. Register `onError` before the first `co_await` inside `co_main`, because the watcher is already waiting when `co_main` starts.
 
 ## Connect
 
@@ -168,17 +168,17 @@ The event loop logs a rethrown `other` as `Exception ...` and still exits 0.
 
 ## Signals
 
-`watchSignals` in `core/event_loop.cpp` waits once:
+`watchSignals` in `core/eventLoop/EventLoop.cpp` waits once:
 
 ```cpp
 auto [status, signo] = co_await signals.async_wait(boost::asio::as_tuple(boost::cobalt::use_op));
 ```
 
-`SIGKILL` cannot be caught. A normal exit of `coMain` cancels the set. The wait then completes with an error, `status` is set, and the watcher returns. It does not close clients and it does not log.
+`SIGKILL` cannot be caught. A normal exit of `co_main` cancels the set. The wait then completes with an error, `status` is set, and the watcher returns. It does not close clients and it does not log.
 
 On `SIGINT` or `SIGTERM` the watcher does four steps, in this order:
 
-1. `requestStop()` sets `sessions().stopping`. `connect` reads that flag before resolve, after resolve, after TCP connect, and after the handshake. Both the watcher and `coMain` run on the one IO thread, so they only interleave at `co_await` points.
+1. `requestStop()` sets `sessions().stopping`. `connect` reads that flag before resolve, after resolve, after TCP connect, and after the handshake. Both the watcher and `co_main` run on the one IO thread, so they only interleave at `co_await` points.
 2. `closeAllClients` locks every tracked connection, clears the registry, and `shutdown`s each socket with the signal error. `failWaiters` resumes a parked `closed()` or `next()`, which then throws.
 3. The message is `received SIGINT, closing NATS client`, `received SIGTERM, closing NATS client`, or `received signal <number>, closing NATS client`.
 4. `reportError` logs that message at info level and runs `onError`.
@@ -198,7 +198,7 @@ AsyncNats::onError([](AsyncNats::Error failure) -> boost::cobalt::task<void> {
 
 ## JetStream
 
-`jetstream.cpp` does not open another socket. `jetstream::make(client)` returns a context that shares the `Client`. Key-value and object-store methods are Cobalt tasks. They publish and request on JetStream API subjects, then parse the JSON reply in this file. The same strand, read loop, and error kinds apply. The store method that removes a key or an object is `remove`.
+`JetStream.cpp` does not open another socket. `jetstream::make(client)` returns a context that shares the `Client`. Key-value and object-store methods are Cobalt tasks. They publish and request on JetStream API subjects, then parse the JSON reply in this file. The same strand, read loop, and error kinds apply. The store method that removes a key or an object is `remove`.
 
 ## `packageFor` and `shellFor`
 

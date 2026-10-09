@@ -1,20 +1,20 @@
 # How AsyncNats runs
 
-The library owns process startup. An application supplies `coMain`. One IO thread reads and writes each NATS socket. A subscription either runs a handler for every message, or a caller waits on `next()` until one message is ready. Connection failures and `SIGINT` / `SIGTERM` both end that wait by resuming it with an `AsyncNats::Error`.
+The library owns process startup. An application supplies `co_main`. One IO thread reads and writes each NATS socket. A subscription either runs a handler for every message, or a caller waits on `next()` until one message is ready. Connection failures and `SIGINT` / `SIGTERM` both end that wait by resuming it with an `AsyncNats::Error`.
 
 The pieces live in:
 
-- `src/async_nats/core/main.cpp` — process `main`
-- `src/async_nats/core/event_loop.cpp` — runtime startup and signals
-- `src/async_nats/core/core.cpp` — the `Core` singleton
-- `src/async_nats/core/include/AsyncNats/Core.h` — public runtime
-- `src/async_nats/client/client.cpp` — connect, read loop, subscribe, wait, close
-- `src/async_nats/client/jetstream.cpp` — JetStream, key-value, and the object store
-- `src/async_nats/client/session.hpp` — private helpers used by the event loop
-- `src/async_nats/client/include/AsyncNats.h` — the public client declarations
-- `src/async_nats/utils/thread_count.hpp` — worker-pool size
+- `src/AsyncNats/core/Main.cpp` — process `main`
+- `src/AsyncNats/core/eventLoop/EventLoop.cpp` — runtime startup and signals
+- `src/AsyncNats/core/Core.cpp` — the `Core` singleton
+- `src/AsyncNats/core/include/AsyncNats/Core.h` — public runtime
+- `src/AsyncNats/client/Client.cpp` — connect, read loop, subscribe, wait, close
+- `src/AsyncNats/client/JetStream.cpp` — JetStream, key-value, and the object store
+- `src/AsyncNats/client/Session.h` — private helpers used by the event loop
+- `src/AsyncNats/client/include/AsyncNats.h` — the public client declarations
+- `src/AsyncNats/core/utils/ThreadCount.h` — worker-pool size
 
-`session.hpp` stays beside the client. `reportError`, `closeAllClients`, `requestStop`, and `stopRequested` are friends of `Client` and are defined in `client.cpp`. `thread_count` only parses `NATS_EVENT_LOOP_WORKER_THREADS`, so it lives under `utils`. The website for this API is the Astro site in `docs/site`. From the repository root, `./doc.sh` shells into `.#doc`, builds that site, and serves it at <http://127.0.0.1:4321/>.
+`Session.h` stays beside the client. `reportError`, `closeAllClients`, `requestStop`, and `stopRequested` are friends of `Client` and are defined in `Client.cpp`. `ThreadCount` only parses `NATS_EVENT_LOOP_WORKER_THREADS`, so it lives under `core/utils`. The website for this API is the Astro site in `docs/site`. From the repository root, `./doc.sh` shells into `.#doc`, builds that site, and serves it at <http://127.0.0.1:4321/>.
 
 ## Startup
 
@@ -38,12 +38,12 @@ Socket work stays on that one IO thread, on a strand, with one outstanding read 
 `run()` does three things on that `io_context`:
 
 1. Arm a `signal_set` for `SIGINT` and `SIGTERM`, and spawn `watchSignals`.
-2. Spawn the user's `coMain`.
-3. When `coMain` finishes, cancel the signal set, stop the IO thread, join it, and return 0.
+2. Spawn the user's `co_main`.
+3. When `co_main` finishes, cancel the signal set, stop the IO thread, join it, and return 0.
 
-The integer `coMain` returns is only logged (`coMain returned N`). The process exit code is 0 unless an exception escapes `coMain`, in which case the event loop logs `Exception ...` and still returns 0.
+The integer `co_main` returns is only logged (`co_main returned N`). The process exit code is 0 unless an exception escapes `co_main`, in which case the event loop logs `Exception ...` and still returns 0.
 
-`AsyncNats::Main` is `boost::cobalt::task<int>`. Register `onError` before the first `co_await` inside `coMain`.
+`AsyncNats::Main` is `boost::cobalt::task<int>`. Register `onError` before the first `co_await` inside `co_main`.
 
 ## Connect
 
@@ -139,11 +139,11 @@ try {
 co_return 0;
 ```
 
-Unreachable, interrupted, closed, and signal are already visible through the log and `onError`, so `coMain` can return 0. Kind `other` is rethrown, and the event loop logs it.
+Unreachable, interrupted, closed, and signal are already visible through the log and `onError`, so `co_main` can return 0. Kind `other` is rethrown, and the event loop logs it.
 
 ## How signals are caught
 
-`watchSignals` is already waiting before `coMain` starts. It waits once on the `signal_set`. `SIGKILL` cannot be caught. A normal exit cancels the set; the wait completes with `operation_aborted`, and the watcher returns without closing clients or logging.
+`watchSignals` is already waiting before `co_main` starts. It waits once on the `signal_set`. `SIGKILL` cannot be caught. A normal exit cancels the set; the wait completes with `operation_aborted`, and the watcher returns without closing clients or logging.
 
 On `SIGINT` or `SIGTERM` the watcher:
 

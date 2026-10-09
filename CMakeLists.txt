@@ -19,17 +19,17 @@ find_package(Boost 1.90 REQUIRED CONFIG COMPONENTS cobalt)
 find_package(spdlog REQUIRED)
 find_package(Threads REQUIRED)
 
-# Listed explicitly. src/async_nats/core/client and core/error are the unused
-# cnats tree and must stay out of the build. The event loop is
-# src/async_nats/core/event_loop.cpp.
-set(ASYNC_NATS_CLIENT_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/client/include)
-set(ASYNC_NATS_CORE_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/core/include)
+# Sources are listed explicitly. The event loop is
+# src/AsyncNats/core/eventLoop/EventLoop.cpp.
+set(ASYNC_NATS_CLIENT_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/client/include)
+set(ASYNC_NATS_CORE_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/core/include)
+set(ASYNC_NATS_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/core)
 
 add_library(AsyncNatsObjects OBJECT
-    src/async_nats/client/client.cpp
-    src/async_nats/client/jetstream.cpp
-    src/async_nats/core/core.cpp
-    src/async_nats/utils/thread_count.cpp
+    src/AsyncNats/client/Client.cpp
+    src/AsyncNats/client/JetStream.cpp
+    src/AsyncNats/core/Core.cpp
+    src/AsyncNats/core/utils/ThreadCount.cpp
 )
 target_compile_features(AsyncNatsObjects PUBLIC cxx_std_23)
 target_include_directories(AsyncNatsObjects PUBLIC
@@ -37,8 +37,8 @@ target_include_directories(AsyncNatsObjects PUBLIC
     $<BUILD_INTERFACE:${ASYNC_NATS_CORE_INCLUDE}>
 )
 target_include_directories(AsyncNatsObjects PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/client
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/client
+    ${ASYNC_NATS_CORE_DIR}
 )
 target_link_libraries(AsyncNatsObjects PUBLIC
     Boost::cobalt
@@ -47,8 +47,8 @@ target_link_libraries(AsyncNatsObjects PUBLIC
 )
 
 add_library(AsyncNats STATIC
-    src/async_nats/core/main.cpp
-    src/async_nats/core/event_loop.cpp
+    src/AsyncNats/core/Main.cpp
+    src/AsyncNats/core/eventLoop/EventLoop.cpp
     $<TARGET_OBJECTS:AsyncNatsObjects>
 )
 add_library(AsyncNats::AsyncNats ALIAS AsyncNats)
@@ -67,9 +67,8 @@ target_include_directories(AsyncNats PUBLIC
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 target_include_directories(AsyncNats PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/client
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/core
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/client
+    ${ASYNC_NATS_CORE_DIR}
 )
 
 target_link_libraries(AsyncNats PUBLIC
@@ -85,12 +84,12 @@ install(TARGETS AsyncNats
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(FILES src/async_nats/client/include/AsyncNats.h
+install(FILES src/AsyncNats/client/include/AsyncNats.h
     COMPONENT library
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(FILES src/async_nats/core/include/AsyncNats/Core.h
+install(FILES src/AsyncNats/core/include/AsyncNats/Core.h
     COMPONENT library
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/AsyncNats
 )
@@ -128,7 +127,7 @@ if(BUILD_TESTS)
     add_executable(AsyncNatsTests tests/core_test.cpp)
     target_link_libraries(AsyncNatsTests PRIVATE AsyncNatsObjects Catch2::Catch2WithMain)
     target_include_directories(AsyncNatsTests PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/async_nats/utils
+        ${ASYNC_NATS_CORE_DIR}
     )
     add_test(NAME AsyncNatsTests COMMAND AsyncNatsTests)
 

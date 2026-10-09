@@ -1,7 +1,7 @@
 #include <AsyncNats.h>
 #include <AsyncNats/Core.h>
 
-#include "session.hpp"
+#include "Session.h"
 
 #include <boost/asio/connect.hpp>
 #include <boost/asio/dispatch.hpp>

@@ -5,7 +5,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "AsyncNats",
-      description: "C++23 NATS client. The library owns main and runs coMain.",
+      description: "C++23 NATS client. The library owns main and runs co_main.",
       lastUpdated: false,
       sidebar: [
         { label: "Overview", link: "/" },

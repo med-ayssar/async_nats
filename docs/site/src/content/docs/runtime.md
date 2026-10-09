@@ -3,7 +3,7 @@ title: How it runs
 description: One IO thread, the worker pool, and the two ways a subscription waits.
 ---
 
-The library owns process startup. An application supplies `coMain`. One IO thread reads and writes each NATS socket. A subscription either runs a handler for every message, or a caller waits on `next()` until one message is ready. Connection failures and `SIGINT` / `SIGTERM` both end that wait by resuming it with an `AsyncNats::Error`.
+The library owns process startup. An application supplies `co_main`. One IO thread reads and writes each NATS socket. A subscription either runs a handler for every message, or a caller waits on `next()` until one message is ready. Connection failures and `SIGINT` / `SIGTERM` both end that wait by resuming it with an `AsyncNats::Error`.
 
 The same walkthrough is in `docs/flow.md` in the repository.
 
@@ -29,16 +29,16 @@ Socket work stays on that one IO thread, on a strand, with one outstanding read 
 `run()` does three things on that `io_context`:
 
 1. Arm a `signal_set` for `SIGINT` and `SIGTERM`, and spawn `watchSignals`.
-2. Spawn the user's `coMain`.
-3. When `coMain` finishes, cancel the signal set, stop the IO thread, join it, and return 0.
+2. Spawn the user's `co_main`.
+3. When `co_main` finishes, cancel the signal set, stop the IO thread, join it, and return 0.
 
 The source files are:
 
-- `src/async_nats/core/main.cpp` — process `main`
-- `src/async_nats/core/event_loop.cpp` — runtime startup and signals
-- `src/async_nats/core/core.cpp` — the `Core` singleton
-- `src/async_nats/client/client.cpp` — connect, read loop, subscribe, wait, close
-- `src/async_nats/client/jetstream.cpp` — JetStream, key-value, and the object store
+- `src/AsyncNats/core/Main.cpp` — process `main`
+- `src/AsyncNats/core/eventLoop/EventLoop.cpp` — runtime startup and signals
+- `src/AsyncNats/core/Core.cpp` — the `Core` singleton
+- `src/AsyncNats/client/Client.cpp` — connect, read loop, subscribe, wait, close
+- `src/AsyncNats/client/JetStream.cpp` — JetStream, key-value, and the object store
 
 ## Connect
 
