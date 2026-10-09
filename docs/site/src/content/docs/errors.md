@@ -3,7 +3,7 @@ title: Errors and signals
 description: ErrorKind, onError, and the SIGINT and SIGTERM path.
 ---
 
-Every failure the library reports is an `AsyncNats::Error`. `what()` is the message. `kind()` is one of:
+The generated page is [`Error`](/doxygen/class_async_nats_1_1_error.html). Every failure the library reports is an `AsyncNats::Error`. `what()` is the message. `kind()` is one of:
 
 | What happened | Kind | What the library does |
 | --- | --- | --- |

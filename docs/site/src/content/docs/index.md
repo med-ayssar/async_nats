@@ -21,6 +21,8 @@ The client API is `<AsyncNats.h>`. The runtime is `<AsyncNats/Core.h>`, class `C
 
 | Page | What it covers |
 | --- | --- |
+| [API](/api/) | Every function, with its signature |
+| [Doxygen](/doxygen/index.html) | The generated reference for the same declarations |
 | [How it runs](/runtime/) | Startup, the read loop, and how a subscription waits |
 | [Core](/core/) | `Core::instance()`, the IO thread, and the worker pool |
 | [Core implementation overview](/implementation/) | The runtime, signals, and `packageFor` / `shellFor` |

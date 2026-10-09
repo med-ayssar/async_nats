@@ -1,7 +1,7 @@
-{ writeShellApplication, nodejs }:
+{ writeShellApplication, nodejs, doxygen }:
 writeShellApplication {
   name = "doc";
-  runtimeInputs = [ nodejs ];
+  runtimeInputs = [ nodejs doxygen ];
   text = ''
     export ASTRO_TELEMETRY_DISABLED=1
 
@@ -11,6 +11,9 @@ writeShellApplication {
     fi
 
     mode="''${1:-serve}"
+    repo="$(cd ../.. && pwd)"
+    rm -rf public/doxygen
+    (cd "$repo" && doxygen docs/Doxyfile)
     npm ci
     npm run build
 

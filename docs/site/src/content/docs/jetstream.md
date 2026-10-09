@@ -3,7 +3,7 @@ title: JetStream
 description: Key-value buckets and the object store on one client connection.
 ---
 
-`jetstream::make` returns a context that shares the client's connection. An lvalue client is copied and stays usable.
+The generated pages start at [`jetstream`](/doxygen/namespace_async_nats_1_1jetstream.html). `jetstream::make` returns a context that shares the client's connection. An lvalue client is copied and stays usable.
 
 ```cpp
 auto js = co_await AsyncNats::jetstream::make(client);

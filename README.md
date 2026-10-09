@@ -129,7 +129,7 @@ Inside the shell, `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug` uses C++23 
 
 ## Documentation
 
-The API site is Astro Starlight in `docs/site`. The flake derivation `.#doc` provides Node.js and the `doc` command.
+The API site is Astro Starlight in `docs/site`. `./doc.sh` also generates the Doxygen reference and serves it at `/doxygen/`. The site sidebar links to those pages. The flake derivation `.#doc` provides Node.js, Doxygen, and the `doc` command.
 
 ```bash
 ./doc.sh         # nix shell .#doc, build the site, serve http://127.0.0.1:4321/

@@ -53,8 +53,13 @@ class Core {
  private:
   friend class EventLoop;
 
+  /** @brief The `io_context` the IO thread is running. */
   auto ioContext() -> boost::asio::io_context&;
+
+  /** @brief Stop the IO context so `run()` can return. */
   void release();
+
+  /** @brief Join the IO thread after `release()`. */
   void join();
 
   explicit Core(std::size_t workerThreads);

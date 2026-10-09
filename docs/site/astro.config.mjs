@@ -9,6 +9,8 @@ export default defineConfig({
       lastUpdated: false,
       sidebar: [
         { label: "Overview", link: "/" },
+        { label: "API", link: "/api/" },
+        { label: "Doxygen", link: "/doxygen/" },
         { label: "How it runs", link: "/runtime/" },
         { label: "Core", link: "/core/" },
         { label: "Core implementation", link: "/implementation/" },

@@ -3,7 +3,7 @@ title: Core
 description: The process-wide IO thread and worker pool.
 ---
 
-Include `<AsyncNats/Core.h>`. `Core` is a process-wide singleton. `main` starts it before `co_main` runs.
+Include `<AsyncNats/Core.h>`. The generated page is [`Core`](/doxygen/class_async_nats_1_1_core.html). `Core` is a process-wide singleton. `main` starts it before `co_main` runs.
 
 ```cpp
 #include <AsyncNats/Core.h>
