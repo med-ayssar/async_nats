@@ -7,14 +7,15 @@ The pieces live in:
 - `src/AsyncNats/core/Main.cpp` — process `main`
 - `src/AsyncNats/core/eventLoop/EventLoop.cpp` — runtime startup and signals
 - `src/AsyncNats/core/Core.cpp` — the `Core` singleton
-- `src/AsyncNats/core/include/AsyncNats/Core.h` — public runtime
+- `src/AsyncNats/core/include/AsyncNats/core/Core.h` — public runtime
 - `src/AsyncNats/client/Client.cpp` — connect, read loop, subscribe, wait, close
 - `src/AsyncNats/client/JetStream.cpp` — JetStream, key-value, and the object store
-- `src/AsyncNats/client/Session.h` — private helpers used by the event loop
-- `src/AsyncNats/client/include/AsyncNats.h` — the public client declarations
-- `src/AsyncNats/core/utils/ThreadCount.h` — worker-pool size
+- `src/AsyncNats/client/include/AsyncNats/client/Session.h` — private helpers used by the event loop
+- `src/AsyncNats/client/include/AsyncNats/client/AsyncNats.h` — the public client declarations
+- `src/AsyncNats/core/eventLoop/include/AsyncNats/eventloop/EventLoop.h` — process startup
+- `src/AsyncNats/core/utils/include/AsyncNats/core/ThreadCount.h` — worker-pool size
 
-`Session.h` stays beside the client. `reportError`, `closeAllClients`, `requestStop`, and `stopRequested` are friends of `Client` and are defined in `Client.cpp`. `ThreadCount` only parses `NATS_EVENT_LOOP_WORKER_THREADS`, so it lives under `core/utils`. The website for this API is the Astro site in `docs/site`. From the repository root, `./doc.sh` shells into `.#doc`, builds that site, and serves it at <http://127.0.0.1:4321/>.
+Headers are included as `<AsyncNats/client/...>`, `<AsyncNats/core/...>`, and `<AsyncNats/eventloop/...>`. `Session.h` and `EventLoop.h` are not installed. `ThreadCount` only parses `NATS_EVENT_LOOP_WORKER_THREADS`. The website for this API is the Astro site in `docs/site`. From the repository root, `./doc.sh` shells into `.#doc`, builds that site, and serves it at <http://127.0.0.1:4321/>.
 
 ## Startup
 

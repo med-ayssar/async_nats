@@ -63,8 +63,7 @@ nix develop ".#async-nats-${COMPILER}" -c cmake -S "${SCRIPT_DIR}" -B "${BUILD_D
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DBUILD_TESTS=ON
-# CMake leaves the Nix compiler's own include paths out of this file.
-# clangd learns them by running that compiler. source env/main.zsh sets CLANGXX
-# to the compiler path, and Neovim passes it to clangd as --query-driver.
+# CMake puts the Nix libc++ and NIX_CFLAGS_COMPILE directories back on this
+# file. Homebrew clangd reads them directly, so std, Boost, and spdlog resolve.
 ln -sfn "build/${COMPILER}/compile_commands.json" "${SCRIPT_DIR}/compile_commands.json"
 echo "Compile commands:  ${SCRIPT_DIR}/compile_commands.json"

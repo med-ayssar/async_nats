@@ -2,7 +2,7 @@
 
 This note is for reading the implementation later. The same text is the Astro page [Core implementation overview](../docs/site/src/content/docs/implementation.md). The shorter public walkthrough is `docs/flow.md`. This file follows the same path further into the source, then explains `packageFor` and `shellFor` in `flake.nix` and the matching functions in the docktopus flake.
 
-The library owns process `main`. An application defines `co_main` and links `AsyncNats::AsyncNats`. `AsyncNats::Main` is `boost::cobalt::task<int>`. The public client header is `<AsyncNats.h>`. The runtime header is `<AsyncNats/Core.h>`.
+The library owns process `main`. An application defines `co_main` and links `AsyncNats::AsyncNats`. `AsyncNats::Main` is `boost::cobalt::task<int>`. The public client header is `<AsyncNats/client/AsyncNats.h>`. The runtime header is `<AsyncNats/core/Core.h>`.
 
 ## What is compiled
 
@@ -13,9 +13,9 @@ CMake lists sources by hand in the repository `CMakeLists.txt`.
 | `AsyncNatsObjects` | `client/Client.cpp`, `client/JetStream.cpp`, `core/Core.cpp`, `core/utils/ThreadCount.cpp` | The client and the runtime, with no `main`. Tests link this. |
 | `AsyncNats` | `core/Main.cpp`, `core/eventLoop/EventLoop.cpp`, plus the objects above | The static library an application links. It supplies `main`. |
 
-The static library takes those objects with `$<TARGET_OBJECTS:AsyncNatsObjects>` and `add_dependencies`. It does not `target_link_libraries` the object library. Public include directories are `client/include` and `core/include`. Private include directories add `client` and `core`, which is why `"Session.h"`, `"eventLoop/EventLoop.h"`, and `"utils/ThreadCount.h"` resolve. Installed names are `libAsyncNats.a`, `include/AsyncNats.h`, `include/AsyncNats/Core.h`, and `lib/cmake/AsyncNats/`.
+The static library takes those objects with `$<TARGET_OBJECTS:AsyncNatsObjects>` and `add_dependencies`. It does not `target_link_libraries` the object library. Public include directories are `client/include` and `core/include`. Private include directories are `core/eventLoop/include` and `core/utils/include`. Headers resolve as `<AsyncNats/client/...>`, `<AsyncNats/core/...>`, and `<AsyncNats/eventloop/...>`. Installed names are `libAsyncNats.a`, `include/AsyncNats/client/AsyncNats.h`, `include/AsyncNats/core/Core.h`, and `lib/cmake/AsyncNats/`.
 
-`Session.h` stays in `client/` because `reportError`, `closeAllClients`, `requestStop`, and `stopRequested` are friends of `Client` and are defined in `Client.cpp`. They are not installed. `ThreadCount` only parses the worker-pool size, so it lives in `core/utils`.
+`Session.h` is `client/include/AsyncNats/client/Session.h`. `reportError`, `closeAllClients`, `requestStop`, and `stopRequested` are friends of `Client` and are defined in `Client.cpp`. That header is not installed. `EventLoop.h` is `core/eventLoop/include/AsyncNats/eventloop/EventLoop.h` and is not installed. `ThreadCount` only parses the worker-pool size, so it lives in `core/utils/include/AsyncNats/core`.
 
 ## Two executors
 

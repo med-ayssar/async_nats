@@ -3,7 +3,7 @@
 Static library that owns `main` and runs a user `co_main` on a Boost.Cobalt task. Link `AsyncNats::AsyncNats` and define:
 
 ```cpp
-#include <AsyncNats.h>
+#include <AsyncNats/client/AsyncNats.h>
 
 AsyncNats::Main co_main(int argc, char* argv[]) {
   auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");
@@ -21,12 +21,12 @@ AsyncNats::Main co_main(int argc, char* argv[]) {
 }
 ```
 
-`AsyncNats::Main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. The client API is `<AsyncNats.h>`. The runtime is `<AsyncNats/Core.h>`.
+`AsyncNats::Main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. The client API is `<AsyncNats/client/AsyncNats.h>`. The runtime is `<AsyncNats/core/Core.h>`.
 
 `main` calls a private event loop to set up the runtime before `co_main`. That loop runs the `io_context` on one thread. `NATS_EVENT_LOOP_WORKER_THREADS` sizes the worker pool and defaults to 1. The pool accepts up to twice `std::thread::hardware_concurrency()`, and at least 2. A larger value is clamped. `AsyncNats::Core::instance()` is the process-wide runtime: `ioThreads()` returns 1, `workerThreads()` reports the pool size, and `threadPool()` is the pool for `boost::asio::post`.
 
 ```cpp
-#include <AsyncNats/Core.h>
+#include <AsyncNats/core/Core.h>
 
 boost::asio::post(AsyncNats::Core::instance().threadPool(), [] {
   // blocking work
@@ -111,12 +111,12 @@ Nix installs the package and links it at `./result`:
 
 ```text
 result/lib/libAsyncNats.a
-result/include/AsyncNats.h
-result/include/AsyncNats/Core.h
+result/include/AsyncNats/client/AsyncNats.h
+result/include/AsyncNats/core/Core.h
 result/lib/cmake/AsyncNats/
 ```
 
-A debug `./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. `./build.sh --release` does not write that file. CMake writes it because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides Boost and spdlog in its own search path, and CMake leaves those paths out of the database. `source env/main.zsh` sets `CLANGXX` to that Nix `clang++` and exports `NIX_CFLAGS_COMPILE` from the same shell. Neovim keeps Homebrew `clangd` as the language server. When `CLANGXX` is set, it passes that compiler as `--query-driver`, so clangd runs it and the compiler reports Boost and spdlog. Start Neovim from the shell where you sourced the file. The installed package does not contain `compile_commands.json`.
+A debug `./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. `./build.sh --release` does not write that file. CMake writes it because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides libc++, Boost, and spdlog in its own search path. CMake would leave those paths out of the database, and Homebrew clangd would then report `std`, Boost, and spdlog as missing. The configure step puts those directories back on the compile command. Restart clangd after `./build.sh`. The installed package does not contain `compile_commands.json`.
 
 A development shell with the matching compiler, CMake, Ninja, Boost, and spdlog:
 

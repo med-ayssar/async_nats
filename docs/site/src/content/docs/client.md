@@ -3,7 +3,7 @@ title: Client
 description: Connect, publish, subscribe, request, and close one NATS connection.
 ---
 
-Include `<AsyncNats.h>`. The generated pages are [`Client`](/doxygen/class_async_nats_1_1_client.html) and [`Subscription`](/doxygen/class_async_nats_1_1_subscription.html). A default-constructed `client` is empty. `connect` returns a live one. Copies share the same connection. Socket operations are not thread-safe: one outstanding read and one outstanding write, on a strand owned by the IO thread.
+Include `<AsyncNats/client/AsyncNats.h>`. The generated pages are [`Client`](/doxygen/class_async_nats_1_1_client.html) and [`Subscription`](/doxygen/class_async_nats_1_1_subscription.html). A default-constructed `client` is empty. `connect` returns a live one. Copies share the same connection. Socket operations are not thread-safe: one outstanding read and one outstanding write, on a strand owned by the IO thread.
 
 ```cpp
 auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");

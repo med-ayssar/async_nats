@@ -3,10 +3,10 @@ title: AsyncNats
 description: C++23 NATS client. The library owns main and runs your co_main coroutine.
 ---
 
-AsyncNats is a static library. Link `AsyncNats::AsyncNats`, include `<AsyncNats.h>`, and define `co_main`. The library supplies process `main`. `AsyncNats::Main` is `boost::cobalt::task<int>`.
+AsyncNats is a static library. Link `AsyncNats::AsyncNats`, include `<AsyncNats/client/AsyncNats.h>`, and define `co_main`. The library supplies process `main`. `AsyncNats::Main` is `boost::cobalt::task<int>`.
 
 ```cpp
-#include <AsyncNats.h>
+#include <AsyncNats/client/AsyncNats.h>
 
 AsyncNats::Main co_main(int argc, char* argv[]) {
   auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");
@@ -17,7 +17,7 @@ AsyncNats::Main co_main(int argc, char* argv[]) {
 
 The integer `co_main` returns is logged. The process exits 0 unless an exception escapes. Register `onError` before the first `co_await`.
 
-The client API is `<AsyncNats.h>`. The runtime is `<AsyncNats/Core.h>`, class `Core`. Socket work stays on one IO thread. `NATS_EVENT_LOOP_WORKER_THREADS` sizes the worker pool and defaults to 1.
+The client API is `<AsyncNats/client/AsyncNats.h>`. The runtime is `<AsyncNats/core/Core.h>`, class `Core`. Socket work stays on one IO thread. `NATS_EVENT_LOOP_WORKER_THREADS` sizes the worker pool and defaults to 1.
 
 | Page | What it covers |
 | --- | --- |

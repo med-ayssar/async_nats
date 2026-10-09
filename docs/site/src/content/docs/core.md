@@ -3,10 +3,10 @@ title: Core
 description: The process-wide IO thread and worker pool.
 ---
 
-Include `<AsyncNats/Core.h>`. The generated page is [`Core`](/doxygen/class_async_nats_1_1_core.html). `Core` is a process-wide singleton. `main` starts it before `co_main` runs.
+Include `<AsyncNats/core/Core.h>`. The generated page is [`Core`](/doxygen/class_async_nats_1_1_core.html). `Core` is a process-wide singleton. `main` starts it before `co_main` runs.
 
 ```cpp
-#include <AsyncNats/Core.h>
+#include <AsyncNats/core/Core.h>
 
 boost::asio::post(AsyncNats::Core::instance().threadPool(), [] {
   // blocking work
@@ -28,4 +28,4 @@ Socket operations are not thread-safe, and they are not exposed on `Core`. Post 
 
 `ioContext()`, `release()`, and `join()` are private. `EventLoop` is the only friend. The header is not a place to run the socket.
 
-The implementation is `src/AsyncNats/core/Core.cpp`. The pool size parser is `src/AsyncNats/core/utils/ThreadCount.h`. [Core implementation overview](/implementation/) follows that code, the signal path, and the Nix package functions.
+The implementation is `src/AsyncNats/core/Core.cpp`. The pool size parser is `src/AsyncNats/core/utils/include/AsyncNats/core/ThreadCount.h`. [Core implementation overview](/implementation/) follows that code, the signal path, and the Nix package functions.

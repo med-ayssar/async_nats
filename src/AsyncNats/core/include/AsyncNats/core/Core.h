@@ -1,5 +1,5 @@
 /**
- * @file AsyncNats/Core.h
+ * @file AsyncNats/core/Core.h
  * @brief Process-wide IO thread and worker pool.
  *
  * `main` starts this runtime before the application's `co_main` runs. Post

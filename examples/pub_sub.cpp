@@ -1,4 +1,4 @@
-#include <AsyncNats.h>
+#include <AsyncNats/client/AsyncNats.h>
 
 #include <spdlog/spdlog.h>
 

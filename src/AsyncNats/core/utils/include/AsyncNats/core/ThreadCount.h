@@ -1,5 +1,5 @@
 /**
- * @file ThreadCount.h
+ * @file AsyncNats/core/ThreadCount.h
  * @brief Worker-pool size for `Core`.
  *
  * Not installed. `Core::instance()` reads `NATS_EVENT_LOOP_WORKER_THREADS`

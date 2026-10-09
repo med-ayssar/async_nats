@@ -1,10 +1,10 @@
 /**
- * @file AsyncNats.h
+ * @file AsyncNats/client/AsyncNats.h
  * @brief NATS client, JetStream key-value store, and object store.
  *
  * The library owns process `main`. The application defines `co_main` and links
  * `AsyncNats::AsyncNats`. This header is the client API. The IO runtime is
- * `<AsyncNats/Core.h>`.
+ * `<AsyncNats/core/Core.h>`.
  *
  * Socket operations are not thread-safe. Each connection keeps one outstanding
  * read and one outstanding write on a strand owned by the single IO thread.

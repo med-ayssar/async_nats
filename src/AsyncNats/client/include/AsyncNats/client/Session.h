@@ -1,5 +1,5 @@
 /**
- * @file Session.h
+ * @file AsyncNats/client/Session.h
  * @brief Private bridge between the event loop and `Client`.
  *
  * These functions are friends of `Client` and are defined in `Client.cpp`.
@@ -7,7 +7,7 @@
  */
 #pragma once
 
-#include <AsyncNats.h>
+#include <AsyncNats/client/AsyncNats.h>
 
 #include <boost/cobalt/task.hpp>
 

@@ -1,4 +1,4 @@
-#include "eventLoop/EventLoop.h"
+#include <AsyncNats/eventloop/EventLoop.h>
 
 auto main(int argc, char* argv[]) -> int {
   AsyncNats::EventLoop loop;

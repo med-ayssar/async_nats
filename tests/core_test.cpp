@@ -1,7 +1,6 @@
-#include <AsyncNats.h>
-#include <AsyncNats/Core.h>
-
-#include "utils/ThreadCount.h"
+#include <AsyncNats/client/AsyncNats.h>
+#include <AsyncNats/core/Core.h>
+#include <AsyncNats/core/ThreadCount.h>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>

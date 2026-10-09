@@ -1,9 +1,7 @@
-#include "EventLoop.h"
-
-#include "Session.h"
-
-#include <AsyncNats.h>
-#include <AsyncNats/Core.h>
+#include <AsyncNats/client/AsyncNats.h>
+#include <AsyncNats/client/Session.h>
+#include <AsyncNats/core/Core.h>
+#include <AsyncNats/eventloop/EventLoop.h>
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/signal_set.hpp>
