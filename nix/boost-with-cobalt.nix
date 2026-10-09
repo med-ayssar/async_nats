@@ -5,9 +5,9 @@
 # overlays.default applies this to pkgs.boost190. docktopus uses that
 # overlay, so both flakes produce the same Boost store path.
 #
-# Cobalt's main.cpp defines main(). async_nats provides main, so the shared
-# library must not export another one. The io and io_ssl libraries are not
-# used.
+# src/main.cpp does not define main. The inline main in
+# <boost/cobalt/detail/main.hpp> is emitted only for a co_main that returns
+# boost::cobalt::main. AsyncNats defines main and uses task<int> co_main.
 {
   lib,
   boost,
@@ -21,20 +21,6 @@ in
 }).overrideAttrs (old: {
   buildPhase = onlyNeeded old.buildPhase;
   installPhase = onlyNeeded old.installPhase;
-
-  postPatch = (old.postPatch or "") + ''
-    for jam in libs/cobalt/build/Jamfile libs/cobalt/build/Jamfile.v2; do
-      if [ -f "$jam" ]; then
-        sed -i.bak '/main\.cpp/d' "$jam"
-        rm -f "$jam.bak"
-      fi
-    done
-    sed -i.bak \
-      -e 's/alias all : boost_cobalt boost_cobalt_io test example/alias all : boost_cobalt test example/' \
-      -e 's/install boost_cobalt boost_cobalt_io boost_cobalt_io_ssl/install boost_cobalt/' \
-      libs/cobalt/build.jam
-    rm -f libs/cobalt/build.jam.bak
-  '';
 
   postInstall = ''
     ver=${boost.version}
