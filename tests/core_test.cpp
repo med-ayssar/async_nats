@@ -1,4 +1,4 @@
-#include <AsyncNats/client/AsyncNats.h>
+#include <AsyncNats.h>
 #include <AsyncNats/core/Core.h>
 #include <AsyncNats/core/ThreadCount.h>
 

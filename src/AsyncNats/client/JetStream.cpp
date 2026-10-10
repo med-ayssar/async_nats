@@ -1,4 +1,4 @@
-#include <AsyncNats/client/AsyncNats.h>
+#include <AsyncNats/client.h>
 
 #include <algorithm>
 #include <array>

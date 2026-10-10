@@ -156,9 +156,14 @@ install(TARGETS AsyncNats
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(FILES src/AsyncNats/client/include/AsyncNats/client/AsyncNats.h
+install(FILES src/AsyncNats/client/include/AsyncNats.h
     COMPONENT library
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/AsyncNats/client
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES src/AsyncNats/client/include/AsyncNats/client.h
+    COMPONENT library
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/AsyncNats
 )
 
 install(FILES src/AsyncNats/core/include/AsyncNats/core/Core.h

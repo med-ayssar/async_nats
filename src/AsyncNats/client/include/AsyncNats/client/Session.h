@@ -7,7 +7,7 @@
  */
 #pragma once
 
-#include <AsyncNats/client/AsyncNats.h>
+#include <AsyncNats/client.h>
 
 #include <boost/cobalt/task.hpp>
 

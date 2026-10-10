@@ -1,4 +1,5 @@
-#include <AsyncNats/client/AsyncNats.h>
+#include <AsyncNats.h>
+#include <AsyncNats/client.h>
 #include <AsyncNats/client/Session.h>
 #include <AsyncNats/core/Core.h>
 #include <AsyncNats/eventloop/EventLoop.h>

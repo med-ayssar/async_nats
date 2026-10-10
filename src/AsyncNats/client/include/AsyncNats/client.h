@@ -1,5 +1,5 @@
 /**
- * @file AsyncNats/client/AsyncNats.h
+ * @file AsyncNats/client.h
  * @brief NATS client, JetStream key-value store, and object store.
  *
  * The library owns process `main`. The application defines `co_main` and links
@@ -75,18 +75,6 @@ class Error : public std::runtime_error {
  * already closed.
  */
 using ErrorHandler = std::function<boost::cobalt::task<void>(Error)>;
-
-/**
- * @brief Register the process-wide error handler.
- *
- * Call this before the first `co_await` in `co_main`. Kind `closed` does not
- * run the handler. A handler that is already on the stack is not entered
- * again. An empty handler clears the previous one.
- *
- * On `ErrorKind::signal` the clients are already closed. Waiting on
- * `closed()` again from inside the handler throws into the handler.
- */
-void onError(ErrorHandler handler);
 
 class Client;
 
@@ -460,4 +448,3 @@ auto make(Client client) -> boost::cobalt::task<Context>;
  * integer is logged. The process exits 0 unless an exception escapes.
  * Register `AsyncNats::onError` before the first `co_await`.
  */
-auto co_main(int argc, char** argv) -> AsyncNats::Main;

@@ -3,7 +3,7 @@
 Static library that owns `main` and runs a user `co_main` on a Boost.Cobalt task. Link `AsyncNats::AsyncNats` and define:
 
 ```cpp
-#include <AsyncNats/client/AsyncNats.h>
+#include <AsyncNats.h>
 
 AsyncNats::Main co_main(int argc, char* argv[]) {
   auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");
@@ -21,7 +21,7 @@ AsyncNats::Main co_main(int argc, char* argv[]) {
 }
 ```
 
-`AsyncNats::Main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. The client API is `<AsyncNats/client/AsyncNats.h>`. The runtime is `<AsyncNats/core/Core.h>`.
+`AsyncNats::Main` is `boost::cobalt::task<int>`. `connect`, JetStream, the key-value store, and the object store are coroutines. `<AsyncNats.h>` declares `co_main` and `onError`; the client API is `<AsyncNats/client.h>`. The runtime is `<AsyncNats/core/Core.h>`.
 
 `main` calls a private event loop to set up the runtime before `co_main`. That loop runs the `io_context` on one thread. `NATS_EVENT_LOOP_WORKER_THREADS` sizes the worker pool and defaults to 1. The pool accepts up to twice `std::thread::hardware_concurrency()`, and at least 2. A larger value is clamped. `AsyncNats::Core::instance()` is the process-wide runtime: `ioThreads()` returns 1, `workerThreads()` reports the pool size, and `threadPool()` is the pool for `boost::asio::post`.
 
@@ -111,7 +111,8 @@ Nix installs the package and links it at `./result`:
 
 ```text
 result/lib/libAsyncNats.a
-result/include/AsyncNats/client/AsyncNats.h
+result/include/AsyncNats.h
+result/include/AsyncNats/client.h
 result/include/AsyncNats/core/Core.h
 result/lib/cmake/AsyncNats/
 ```

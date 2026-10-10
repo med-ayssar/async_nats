@@ -11,7 +11,8 @@ The pieces live in:
 - `src/AsyncNats/client/Client.cpp` — connect, read loop, subscribe, wait, close
 - `src/AsyncNats/client/JetStream.cpp` — JetStream, key-value, and the object store
 - `src/AsyncNats/client/include/AsyncNats/client/Session.h` — private helpers used by the event loop
-- `src/AsyncNats/client/include/AsyncNats/client/AsyncNats.h` — the public client declarations
+- `src/AsyncNats/client/include/AsyncNats.h` — the `co_main` entry declaration
+- `src/AsyncNats/client/include/AsyncNats/client.h` — the public client declarations
 - `src/AsyncNats/core/eventLoop/include/AsyncNats/eventloop/EventLoop.h` — process startup
 - `src/AsyncNats/core/utils/include/AsyncNats/core/ThreadCount.h` — worker-pool size
 
