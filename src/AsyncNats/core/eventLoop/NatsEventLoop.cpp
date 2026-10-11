@@ -7,7 +7,6 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <system_error>
 
 #if defined(_WIN32)
@@ -182,34 +181,14 @@ using StateHandle = std::shared_ptr<SocketState>;
 
 auto stateFrom(void* data) -> StateHandle& { return *static_cast<StateHandle*>(data); }
 
-auto sharedIoContext() -> boost::asio::io_context*& {
-  static boost::asio::io_context* context = nullptr;
-  return context;
-}
-
-auto initializationFlag() -> std::once_flag& {
-  static std::once_flag flag;
-  return flag;
-}
-
-auto eventLoopContext() -> boost::asio::io_context& {
-  return *sharedIoContext();
-}
-
 }  // namespace
 
-void AsyncNatsEventLoop::initialize() {
-  std::call_once(initializationFlag(), [] { sharedIoContext() = &Core::instance().ioContext(); });
-}
-
 auto AsyncNatsEventLoop::executor() -> boost::asio::any_io_executor {
-  initialize();
-  return eventLoopContext().get_executor();
+  return Core::instance().ioContext().get_executor();
 }
 
 auto AsyncNatsEventLoop::configure(natsOptions* options) -> natsStatus {
-  initialize();
-  return natsOptions_SetEventLoop(options, &eventLoopContext(), attach, setRead, setWrite, detach);
+  return natsOptions_SetEventLoop(options, &Core::instance().ioContext(), attach, setRead, setWrite, detach);
 }
 
 auto AsyncNatsEventLoop::attach(void** userData, void* loop, natsConnection* connection,

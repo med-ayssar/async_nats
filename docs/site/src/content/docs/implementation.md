@@ -13,7 +13,7 @@ CMake lists sources explicitly. `AsyncNatsObjects` contains the coroutine client
 
 ## Event loop and coroutine calls
 
-`EventLoop::setup()`, called by the library's `main`, initializes the shared `AsyncNatsEventLoop` on `Core::instance()`'s IO context. The NATS C API takes its event loop through `natsOptions`, so `connect()` applies this same initialized adapter to each connection's options. Each connected NATS socket is assigned to Asio, which invokes `natsConnection_ProcessReadEvent` or `natsConnection_ProcessWriteEvent` when the descriptor is ready. Attach, read, write, close, and detach operations are serialized on the shared IO context.
+`EventLoop::setup()`, called by the library's `main`, starts the shared `Core` runtime and its Asio IO context. The NATS C API takes its event loop through each connection's `natsOptions`, so `connect()` attaches the adapter to every connection using that same context. Each connected NATS socket is assigned to Asio, which invokes `natsConnection_ProcessReadEvent` or `natsConnection_ProcessWriteEvent` when the descriptor is ready. Attach, read, write, close, and detach operations are serialized on the shared IO context.
 
 `Client.cpp` wraps the C API. Operations that can block, such as connecting and request/reply, run on the worker pool and resume on the coroutine executor. The NATS C message callback copies the subject, payload, and optional reply from `natsMsg`, destroys the C message, and posts the copy to AsyncNats.
 

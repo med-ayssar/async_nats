@@ -2,9 +2,9 @@
 
 AsyncNats wraps the NATS C client with Boost.Cobalt tasks. The C library owns
 the NATS protocol, connection management, and subscription callbacks. The
-library's `main` initializes one `AsyncNatsEventLoop` on the `Core` Asio IO
-context. Since the C API attaches it through `natsOptions`, each `connect()`
-applies that same adapter to its connection options with
+library's `main` starts one `Core` Asio IO context. Since the C API attaches
+the event loop through each connection's `natsOptions`, every `connect()` uses
+the same `AsyncNatsEventLoop` callbacks and IO context with
 `natsOptions_SetEventLoop`.
 
 ## Connection calls
