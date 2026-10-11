@@ -3,6 +3,7 @@
 #include <AsyncNats/client/Session.h>
 #include <AsyncNats/core/Core.h>
 #include <AsyncNats/eventloop/EventLoop.h>
+#include <AsyncNats/eventloop/NatsEventLoop.h>
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/signal_set.hpp>
@@ -54,6 +55,7 @@ void EventLoop::setup() {
     return;
   }
   impl_->runtime = &Core::instance();
+  AsyncNatsEventLoop::initialize();
 }
 
 auto EventLoop::run(int argc, char** argv) -> int {

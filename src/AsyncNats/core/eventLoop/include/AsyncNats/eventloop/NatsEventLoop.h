@@ -8,7 +8,10 @@ namespace AsyncNats {
 /** Bridges the NATS C client's socket callbacks to Core's Asio loop. */
 class AsyncNatsEventLoop {
  public:
+  /** Initialize the shared adapter during process runtime setup. */
+  static void initialize();
   static auto executor() -> boost::asio::any_io_executor;
+  /** Apply the initialized adapter to each connection's native options. */
   static auto configure(natsOptions* options) -> natsStatus;
 
  private:

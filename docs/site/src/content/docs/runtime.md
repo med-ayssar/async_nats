@@ -4,15 +4,18 @@ description: How AsyncNats wraps the NATS C client with coroutines and an Asio e
 ---
 
 AsyncNats wraps the NATS C client with Boost.Cobalt tasks. The C library owns
-the NATS protocol, connection management, and subscription callbacks. AsyncNats
-registers `AsyncNatsEventLoop` through `natsOptions_SetEventLoop`, so socket
-readiness is processed on the `Core` Asio IO context.
+the NATS protocol, connection management, and subscription callbacks. The
+library's `main` initializes one `AsyncNatsEventLoop` on the `Core` Asio IO
+context. Since the C API attaches it through `natsOptions`, each `connect()`
+applies that same adapter to its connection options with
+`natsOptions_SetEventLoop`.
 
 ## Startup
 
-`main` creates an `EventLoop`, starts the `Core` singleton, and runs the
-application's `co_main`. The runtime has one IO thread and a worker pool sized
-by `NATS_EVENT_LOOP_WORKER_THREADS`.
+`main` creates an `EventLoop`. Its `setup()` starts the `Core` singleton and
+initializes the shared NATS event-loop adapter before running the application's
+`co_main`. The runtime has one IO thread and a worker pool sized by
+`NATS_EVENT_LOOP_WORKER_THREADS`.
 
 When `co_main` finishes, the event loop closes tracked NATS connections while
 the IO context is still running. This lets the C library detach its sockets
