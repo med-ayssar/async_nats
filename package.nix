@@ -5,6 +5,7 @@
   ninja,
   boost,
   spdlog,
+  libnats-c,
   libraries,
   catch2_3,
   withTests ? false,
@@ -42,12 +43,14 @@ stdenv.mkDerivation {
   buildInputs = [
     boost
     spdlog
+    libnats-c
   ]
   ++ builtins.attrValues libraries;
 
   propagatedBuildInputs = [
     boost
     spdlog
+    libnats-c
   ]
   ++ builtins.attrValues libraries;
 

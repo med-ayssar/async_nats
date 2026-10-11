@@ -1,74 +1,42 @@
 ---
 title: How it runs
-description: One IO thread, the worker pool, and the two ways a subscription waits.
+description: How AsyncNats wraps the NATS C client with coroutines and an Asio event loop.
 ---
 
-The library owns process startup. An application supplies `co_main`. One IO thread reads and writes each NATS socket. A subscription either runs a handler for every message, or a caller waits on `next()` until one message is ready. Connection failures and `SIGINT` / `SIGTERM` both end that wait by resuming it with an `AsyncNats::Error`.
-
-The same walkthrough is in `docs/flow.md` in the repository.
+AsyncNats wraps the NATS C client with Boost.Cobalt tasks. The C library owns
+the NATS protocol, connection management, and subscription callbacks. AsyncNats
+registers `AsyncNatsEventLoop` through `natsOptions_SetEventLoop`, so socket
+readiness is processed on the `Core` Asio IO context.
 
 ## Startup
 
-`main` builds an `EventLoop`, calls `setup()`, then `run()`:
+`main` creates an `EventLoop`, starts the `Core` singleton, and runs the
+application's `co_main`. The runtime has one IO thread and a worker pool sized
+by `NATS_EVENT_LOOP_WORKER_THREADS`.
 
-```cpp
-auto main(int argc, char* argv[]) -> int {
-  AsyncNats::EventLoop loop;
-  loop.setup();
-  return loop.run(argc, argv);
-}
-```
+When `co_main` finishes, the event loop closes tracked NATS connections while
+the IO context is still running. This lets the C library detach its sockets
+through the adapter before AsyncNats shuts down the NATS library and joins the
+IO thread.
 
-`setup()` starts the `Core` singleton:
+## Coroutine wrappers
 
-- one thread running `io_context::run()`
-- a `boost::asio::thread_pool` sized by `NATS_EVENT_LOOP_WORKER_THREADS` (default 1)
+`Client.cpp` wraps `natsConnection_*`, `natsSubscription_*`, and `natsMsg_*`
+functions. Calls that can block, including connection setup and request/reply,
+run on the worker pool and resume on the coroutine's executor.
 
-Socket work stays on that one IO thread, on a strand, with one outstanding read and one outstanding write. `ioThreads()` returns 1. `workerThreads()` reports the pool size. `threadPool()` is the pool for blocking work posted with `boost::asio::post`.
+The event-loop adapter assigns each native socket to Asio and routes read/write
+readiness to `natsConnection_ProcessReadEvent` and
+`natsConnection_ProcessWriteEvent`. Registration and detach callbacks are
+serialized on the IO context.
 
-`run()` does three things on that `io_context`:
+## Subscriptions
 
-1. Arm a `signal_set` for `SIGINT` and `SIGTERM`, and spawn `watchSignals`.
-2. Spawn the user's `co_main`.
-3. When `co_main` finishes, cancel the signal set, stop the IO thread, join it, and return 0.
+Both subscription forms use the native C message callback. Pull subscriptions
+queue copied messages for `Subscription::next()`. Route subscriptions start
+their `MessageHandler` on the worker pool. The callback copies the subject,
+payload, and optional reply subject, destroys the native `natsMsg`, and then
+posts the copy to AsyncNats.
 
-The source files are:
-
-- `src/AsyncNats/core/Main.cpp` — process `main`
-- `src/AsyncNats/core/eventLoop/EventLoop.cpp` — runtime startup and signals
-- `src/AsyncNats/core/Core.cpp` — the `Core` singleton
-- `src/AsyncNats/client/Client.cpp` — connect, read loop, subscribe, wait, close
-- `src/AsyncNats/client/JetStream.cpp` — JetStream, key-value, and the object store
-
-## Connect
-
-`connect` resolves the host, opens TCP, reads the server `INFO`, sends `CONNECT` and `PING`, and waits for `PONG`. After that handshake it records the connection and spawns `readLoop` on the socket's strand. `readLoop` is the only reader for the life of the socket.
-
-`readLoop` waits for the next protocol line:
-
-- `PING` is answered with `PONG`
-- `MSG` and `HMSG` are parsed and passed to `deliver`
-- a line that starts with `-ERR` becomes an `AsyncNats::Error` of kind `other`
-- any other line is skipped
-
-`connect` also checks a process-wide stop flag before resolve, after resolve, after TCP connect, and after the handshake. A signal that arrives during connect sets that flag. `connect` then closes the new socket and throws kind `signal`.
-
-## Route subscribe
-
-`subscribe` with a list of `{subject, handler}` pairs assigns a subscription id to each route, stores the handler, and writes one `SUB` frame per route. This call does not wait for a message.
-
-When `deliver` finds a handler for that id, it starts the handler with `boost::cobalt::spawn` on the worker pool and returns. It does not `co_await` the handler, so a slow handler does not stall the read loop. Client calls inside the handler move back to the socket strand before they touch the socket. If the handler throws, the exception is logged as `nats handler failed` and the connection stays up.
-
-The application then waits on the connection with `co_await client.closed()`. Every message until then is a separate spawned handler.
-
-## Pull subscribe
-
-`subscribe(subject)` sends one `SUB` and returns a `subscription`. `next()` calls `receive`:
-
-1. If that subscription's queue already holds a message, `next()` returns it immediately.
-2. If the connection has already failed, `next()` throws the stored error.
-3. Otherwise the coroutine suspends. Its handle is the single waiter for that subscription.
-
-A later `deliver` with no route handler resumes that waiter and gives it the message. If nobody is waiting, the message is pushed onto a per-subscription queue. That queue is unbounded, and `SUB` is sent with no pending limit, so a fast publisher can grow it for as long as the connection lives.
-
-`request()` uses the same wait. It subscribes a one-shot inbox (`UNSUB <sid> 1`), publishes with that inbox as the reply subject, and waits for the reply.
+JetStream helpers continue to use the public `Client` operations and therefore
+share the same native connection and event loop.

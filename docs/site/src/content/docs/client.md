@@ -3,13 +3,13 @@ title: Client
 description: Connect, publish, subscribe, request, and close one NATS connection.
 ---
 
-Include `<AsyncNats/client.h>`. The generated pages are [`Client`](/doxygen/class_async_nats_1_1_client.html) and [`Subscription`](/doxygen/class_async_nats_1_1_subscription.html). A default-constructed `client` is empty. `connect` returns a live one. Copies share the same connection. Socket operations are not thread-safe: one outstanding read and one outstanding write, on a strand owned by the IO thread.
+Include `<AsyncNats/client.h>`. The generated pages are [`Client`](/doxygen/class_async_nats_1_1_client.html) and [`Subscription`](/doxygen/class_async_nats_1_1_subscription.html). A default-constructed `client` is empty. `connect` returns a live one. Copies share the same connection. The NATS C client owns protocol and subscription processing; its socket readiness callbacks use AsyncNats's Asio event loop.
 
 ```cpp
 auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");
 ```
 
-`connect` takes a `nats://host:port` URL. The port defaults to 4222. It resolves the host, connects, reads `INFO`, and sends `CONNECT` and `PING`. After `PONG` the read loop owns the socket.
+`connect` takes a `nats://host:port` URL. The NATS C client handles the protocol and reconnects. AsyncNats attaches its socket readiness callbacks to the process-wide Asio event loop, while coroutine wrappers move blocking C API calls onto the worker pool.
 
 ## Publish and request
 
@@ -43,7 +43,7 @@ co_await client.subscribe({
 co_await client.unsubscribe({"Grok"});
 ```
 
-Each route is a subject and a `MessageHandler`. The handler is `task<void>(message)`. The read loop starts it on the worker pool and does not wait, so a slow handler does not stall the socket. Client calls from the handler return to the IO thread before they touch the socket. A thrown handler is logged and the connection stays up.
+Each route is a subject and a `MessageHandler`. The handler is `task<void>(message)`. The native NATS callback starts it on the worker pool and does not wait, so a slow handler does not stall socket processing. A thrown handler is logged and the connection stays up.
 
 An empty route list does nothing. Duplicate subjects become separate subscriptions. `unsubscribe` sends `UNSUB` for every route on those subjects and drops the handlers. Unknown subjects are skipped.
 
@@ -54,6 +54,6 @@ co_await client.close();
 co_await client.closed();
 ```
 
-`close()` shuts the socket down and wakes waiters with `ErrorKind::closed`. It does not log and does not run `onError`. An empty client returns immediately.
+`close()` closes the C client connection and wakes waiters with `ErrorKind::closed`. It does not log and does not run `onError`. An empty client returns immediately.
 
 `closed()` suspends until the connection fails or `close()` runs, then throws the stored `error`. The first reason sticks. A later failure does not replace it.

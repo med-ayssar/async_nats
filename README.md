@@ -83,9 +83,11 @@ my_lib = inputs.my_lib.packages.${system}.${compiler};
 From this directory:
 
 ```bash
-./build.sh            # Clang Debug, plus compile_commands.json
-./build.sh --gcc
+nix develop .#async-nats-clang
+./build.sh            # Clang Debug, installed to ./install
 ./build.sh --release  # Clang Release
+nix develop .#async-nats-gcc
+./build.sh --gcc      # GCC Debug
 ./install.sh          # Clang Debug into the Nix profile
 ./install.sh --gcc --release
 ```
@@ -107,19 +109,19 @@ Another flake includes one of those packages. Release is `async-nats-${compiler}
 async_nats = inputs.async_nats.packages.${system}."async-nats-${compiler}-debug";
 ```
 
-Nix installs the package and links it at `./result`:
+`build.sh` configures and builds inside the selected Nix development shell, then installs to `./install`:
 
 ```text
-result/lib/libAsyncNats.a
-result/include/AsyncNats.h
-result/include/AsyncNats/client.h
-result/include/AsyncNats/core/Core.h
-result/lib/cmake/AsyncNats/
+install/lib/libAsyncNats.a
+install/include/AsyncNats.h
+install/include/AsyncNats/client.h
+install/include/AsyncNats/core/Core.h
+install/lib/cmake/AsyncNats/
 ```
 
-A debug `./build.sh` also configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. `./build.sh --release` does not write that file. CMake writes it because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides libc++, Boost, and spdlog in its own search path. CMake would leave those paths out of the database, and Homebrew clangd would then report `std`, Boost, and spdlog as missing. The configure step puts those directories back on the compile command. Restart clangd after `./build.sh`. The installed package does not contain `compile_commands.json`.
+A `./build.sh` run configures `build/clang` or `build/gcc` and links `compile_commands.json` at the repository root. CMake writes it because `CMAKE_EXPORT_COMPILE_COMMANDS` is on. The Nix compiler hides libc++, Boost, and spdlog in its own search path. CMake would leave those paths out of the database, and Homebrew clangd would then report `std`, Boost, and spdlog as missing. The configure step puts those directories back on the compile command. Restart clangd after `./build.sh`. The installed package does not contain `compile_commands.json`.
 
-A development shell with the matching compiler, CMake, Ninja, Boost, and spdlog:
+A development shell with the matching compiler, CMake, Ninja, Boost, and spdlog. Enter it before running `build.sh`. Its shell hook sources `env/main.sh` automatically and exports `CXX` and `CLANGD`:
 
 ```bash
 nix develop .#async-nats-clang

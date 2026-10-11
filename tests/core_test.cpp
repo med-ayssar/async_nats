@@ -85,7 +85,7 @@ TEST_CASE("connect reports a server that is not reachable") {
                            std::rethrow_exception(exception);
                          } catch (const AsyncNats::Error& failure) {
                            REQUIRE(failure.kind() == AsyncNats::ErrorKind::unreachable);
-                           REQUIRE(std::string(failure.what()).find("is not reachable") != std::string::npos);
+                           REQUIRE(std::string(failure.what()).find("NATS connection failed:") != std::string::npos);
                          }
                        });
   io.run();
@@ -113,8 +113,8 @@ TEST_CASE("connect reports a server that drops the connection") {
                          try {
                            std::rethrow_exception(exception);
                          } catch (const AsyncNats::Error& failure) {
-                           REQUIRE(failure.kind() == AsyncNats::ErrorKind::interrupted);
-                           REQUIRE(std::string(failure.what()).find("was interrupted") != std::string::npos);
+                           REQUIRE(failure.kind() == AsyncNats::ErrorKind::unreachable);
+                           REQUIRE(std::string(failure.what()).find("NATS connection failed:") != std::string::npos);
                          }
                        });
   io.run();

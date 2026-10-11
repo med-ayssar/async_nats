@@ -59,6 +59,7 @@
           buildType = cmakeBuildType;
           boost = pkgs.boost190;
           spdlog = pkgs.spdlog;
+          libnats-c = pkgs.libnats-c;
           catch2_3 = pkgs.catch2_3;
         };
       shellFor =
@@ -72,11 +73,17 @@
           };
         in
         (pkgs.mkShell.override { inherit stdenv; }) {
+          shellHook = ''
+            export CXX=${stdenv.cc}/bin/${if compiler == "gcc" then "g++" else "clang++"}
+            source ${./env/main.sh}
+          '';
           packages = [
             pkgs.cmake
             pkgs.ninja
+            pkgs.clang-tools
             pkgs.boost190
             pkgs.spdlog
+            pkgs.libnats-c
             pkgs.catch2_3
           ]
           ++ builtins.attrValues libraries;

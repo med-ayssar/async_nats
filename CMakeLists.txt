@@ -71,6 +71,8 @@ unset(_async_nats_libcxx)
 find_package(Boost 1.90 REQUIRED CONFIG COMPONENTS cobalt)
 find_package(spdlog REQUIRED)
 find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(cnats CONFIG REQUIRED)
 
 foreach(_async_nats_dep IN ITEMS Boost::headers Boost::cobalt spdlog::spdlog fmt::fmt)
     if(TARGET "${_async_nats_dep}")
@@ -95,6 +97,7 @@ set(ASYNC_NATS_UTILS_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/core/util
 
 add_library(AsyncNatsObjects OBJECT
     src/AsyncNats/client/Client.cpp
+    src/AsyncNats/core/eventLoop/NatsEventLoop.cpp
     src/AsyncNats/client/JetStream.cpp
     src/AsyncNats/core/Core.cpp
     src/AsyncNats/core/utils/ThreadCount.cpp
@@ -106,6 +109,7 @@ target_include_directories(AsyncNatsObjects PUBLIC
 )
 target_include_directories(AsyncNatsObjects PRIVATE
     ${ASYNC_NATS_UTILS_INCLUDE}
+    ${ASYNC_NATS_EVENT_LOOP_INCLUDE}
 )
 if(ASYNC_NATS_LIBCXX_INCLUDE)
     target_include_directories(AsyncNatsObjects SYSTEM PRIVATE "${ASYNC_NATS_LIBCXX_INCLUDE}")
@@ -114,6 +118,7 @@ target_link_libraries(AsyncNatsObjects PUBLIC
     Boost::cobalt
     spdlog::spdlog
     Threads::Threads
+    cnats::nats
 )
 
 add_library(AsyncNats STATIC
@@ -147,6 +152,7 @@ target_link_libraries(AsyncNats PUBLIC
     Boost::cobalt
     spdlog::spdlog
     Threads::Threads
+    cnats::nats
 )
 
 install(TARGETS AsyncNats

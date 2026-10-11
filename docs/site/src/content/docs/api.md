@@ -37,7 +37,7 @@ Doxygen: [`AsyncNats`](/doxygen/namespace_async_nats.html) and [`Client`](/doxyg
 auto connect(std::string url) -> boost::cobalt::task<Client>;
 ```
 
-Open `nats://host:port`. The port defaults to 4222. Resolves the host, connects, reads `INFO`, and sends `CONNECT` and `PING`. After `PONG` the read loop owns the socket. A stop request during connect closes the new socket and throws kind `signal`. Kind `unreachable` means resolve or TCP connect failed. Kind `interrupted` means the handshake failed.
+Open `nats://host:port`. The NATS C client handles the protocol and reconnects, with socket readiness callbacks routed through AsyncNats's Asio event loop. A stop request during connect closes the new connection and throws kind `signal`. Kind `unreachable` means the connection could not be established. Kind `interrupted` means the established connection was permanently lost.
 
 ### `onError`
 
@@ -53,7 +53,7 @@ Register the process-wide handler. `ErrorHandler` is `task<void>(Error)`. Call t
 auto publish(std::string subject, std::string payload) -> boost::cobalt::task<void>;
 ```
 
-Publish `payload` to `subject`. Throws when the client is empty, the subject is invalid, or the write fails.
+Publish `payload` to `subject` through the NATS C client. Throws when the client is empty, the subject is invalid, or the C API rejects the publish.
 
 ### `Client::subscribe`
 
@@ -61,13 +61,13 @@ Publish `payload` to `subject`. Throws when the client is empty, the subject is 
 auto subscribe(std::string subject) -> boost::cobalt::task<Subscription>;
 ```
 
-Subscribe and return a pull handle. `Subscription::next` waits for one message. Throws when the client is empty, the subject is invalid, or the write fails.
+Subscribe and return a pull handle. `Subscription::next` waits for one message. Throws when the client is empty, the subject is invalid, or the C API rejects the subscription.
 
 ```cpp
 auto subscribe(std::vector<Route> routes) -> boost::cobalt::task<void>;
 ```
 
-Subscribe each route and start its handler for every message. Sends one `SUB` per route and returns when those frames are written. It does not wait for a message. An empty list does nothing. Duplicate subjects become separate subscriptions. If the write fails, the routes just added are dropped. Throws when the client is empty, a subject or handler is invalid, or the write fails.
+Subscribe each route and start its handler for every message. It returns after each native subscription is created and does not wait for a message. An empty list does nothing. Duplicate subjects become separate subscriptions. If a subscription fails, the routes just added are dropped. Throws when the client is empty, a subject or handler is invalid, or the C API rejects a subscription.
 
 ### `Client::unsubscribe`
 
@@ -75,7 +75,7 @@ Subscribe each route and start its handler for every message. Sends one `SUB` pe
 auto unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void>;
 ```
 
-Send `UNSUB` for every route on these subjects and drop the handlers. Unknown subjects are skipped. An empty list does nothing.
+Unsubscribe every route on these subjects and drop the handlers. Unknown subjects are skipped. An empty list does nothing.
 
 ### `Client::request`
 
@@ -83,7 +83,7 @@ Send `UNSUB` for every route on these subjects and drop the handlers. Unknown su
 auto request(std::string subject, std::string payload) -> boost::cobalt::task<std::string>;
 ```
 
-Publish `payload` and return the body of the reply. Subscribes a one-shot inbox, publishes with that inbox as the reply subject, and waits for one response.
+Publish `payload` and return the body of the reply. Uses the native request API and waits up to 30 seconds for a response.
 
 ```cpp
 auto request(std::string subject, std::string payload,
@@ -91,7 +91,7 @@ auto request(std::string subject, std::string payload,
     -> boost::cobalt::task<std::string>;
 ```
 
-The same call with NATS headers. Each pair is a header name and its value.
+The same call with NATS headers. Each pair is a header name and its value. Both overloads throw if the request fails or the timeout expires.
 
 ### `Client::close`
 
@@ -99,7 +99,7 @@ The same call with NATS headers. Each pair is a header name and its value.
 auto close() -> boost::cobalt::task<void>;
 ```
 
-Shut the socket down and wake waiters with kind `closed`. Does not log and does not run `onError`. An empty client returns immediately.
+Close the NATS connection and wake waiters with kind `closed`. Does not log and does not run `onError`. An empty client returns immediately.
 
 ### `Client::closed`
 
@@ -151,7 +151,7 @@ One inbound NATS message. `reply` is set when the publisher supplied a reply sub
 using MessageHandler = std::function<boost::cobalt::task<void>(Message)>;
 ```
 
-Coroutine started for each message on a route subscription. The read loop starts it on the worker pool and does not wait. A slow handler does not stall the socket. Client calls from the handler return to the IO thread before they touch the socket. A thrown exception is logged and the connection stays up.
+Coroutine started for each message on a route subscription. The native NATS callback starts it on the worker pool and does not wait. A slow handler does not stall socket processing. A thrown exception is logged and the connection stays up.
 
 ### `Route`
 
@@ -188,17 +188,17 @@ Which path produced this error.
 
 | Enumerator | Meaning |
 | --- | --- |
-| `unreachable` | Resolve or the TCP connect failed. |
-| `interrupted` | The socket died, the peer sent EOF, or the handshake failed. |
+| `unreachable` | The NATS C client could not establish the connection. |
+| `interrupted` | The NATS C client permanently lost an established connection. |
 | `closed` | `Client::close()` finished the connection. |
 | `signal` | The process received `SIGINT` or `SIGTERM`. |
-| `other` | A protocol `-ERR`, or a programming mistake such as a missing client. |
+| `other` | A NATS API error, timeout, or programming mistake such as a missing client. |
 
 ## Runtime
 
 Doxygen: [`Core`](/doxygen/class_async_nats_1_1_core.html) and [`Core.h`](/doxygen/_core_8h.html).
 
-`Core` is a process-wide singleton. Socket operations are not thread-safe and are not run on the worker pool.
+`Core` is a process-wide singleton. Native socket readiness is handled through the Asio IO context; blocking NATS C calls are run on the worker pool.
 
 ### `Core::instance`
 

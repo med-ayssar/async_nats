@@ -7,7 +7,7 @@ BUILD_TYPE="debug"
 
 usage() {
   echo "Usage: $0 [--clang|--gcc] [--debug|--release]"
-  echo "  Build AsyncNats with Nix. C++23."
+  echo "  Build and install AsyncNats with the active toolchain. C++23."
   echo "  --clang    Clang (default)"
   echo "  --gcc      GCC"
   echo "  --debug    Debug (default)"
@@ -45,25 +45,29 @@ done
 
 cd "${SCRIPT_DIR}"
 
-nix build ".#async-nats-${COMPILER}-${BUILD_TYPE}" -o result
-
-echo "Installed package: ${SCRIPT_DIR}/result"
-echo "Library:           ${SCRIPT_DIR}/result/lib/libAsyncNats.a"
-echo "CMake package:     ${SCRIPT_DIR}/result/lib/cmake/AsyncNats/"
-
-if [[ "${BUILD_TYPE}" != "debug" ]]; then
-  exit 0
+# Configure, build, and install with the active toolchain.
+BUILD_DIR="${SCRIPT_DIR}/build/${COMPILER}"
+INSTALL_PREFIX="${SCRIPT_DIR}/install"
+CXX_COMPILER="clang++"
+if [[ "${BUILD_TYPE}" == "debug" ]]; then
+  CMAKE_BUILD_TYPE="Debug"
+else
+  CMAKE_BUILD_TYPE="Release"
+fi
+if [[ "${COMPILER}" == "gcc" ]]; then
+  CXX_COMPILER="g++"
 fi
 
-# The Nix build runs in a sandbox, so its compile database points at that
-# temporary tree. A debug build configures this checkout and leaves
-# compile_commands.json where clangd looks for it.
-BUILD_DIR="${SCRIPT_DIR}/build/${COMPILER}"
-nix develop ".#async-nats-${COMPILER}" -c cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" -G Ninja \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  -DBUILD_TESTS=ON
-# CMake puts the Nix libc++ and NIX_CFLAGS_COMPILE directories back on this
-# file. Homebrew clangd reads them directly, so std, Boost, and spdlog resolve.
+cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" -G Ninja \
+  -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
+  -DCMAKE_CXX_COMPILER="${CXX_COMPILER}" \
+  -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}" \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build "${BUILD_DIR}" --parallel
+cmake --install "${BUILD_DIR}"
+
 ln -sfn "build/${COMPILER}/compile_commands.json" "${SCRIPT_DIR}/compile_commands.json"
 echo "Compile commands:  ${SCRIPT_DIR}/compile_commands.json"
+echo "Install prefix:    ${INSTALL_PREFIX}"
+echo "Library:           ${INSTALL_PREFIX}/lib/libAsyncNats.a"
+echo "CMake package:     ${INSTALL_PREFIX}/lib/cmake/AsyncNats/"

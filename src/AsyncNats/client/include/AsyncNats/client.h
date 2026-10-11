@@ -6,8 +6,9 @@
  * `AsyncNats::AsyncNats`. This header is the client API. The IO runtime is
  * `<AsyncNats/core/Core.h>`.
  *
- * Socket operations are not thread-safe. Each connection keeps one outstanding
- * read and one outstanding write on a strand owned by the single IO thread.
+ * The NATS C client owns protocol parsing, reconnects, and subscriptions. Its
+ * socket readiness callbacks are attached to the process-wide Asio event loop;
+ * coroutine operations that may block are run on the worker pool.
  */
 #pragma once
 
@@ -37,13 +38,13 @@ using Main = boost::cobalt::task<int>;
 enum class ErrorKind {
   /** Resolve or the TCP connect failed. */
   unreachable,
-  /** The socket died, the peer sent EOF, or the handshake failed. */
+  /** The NATS C client permanently lost an established connection. */
   interrupted,
   /** `Client::close()` finished the connection. */
   closed,
   /** The process received `SIGINT` or `SIGTERM`. */
   signal,
-  /** A protocol `-ERR`, or a programming mistake such as a missing client. */
+  /** A NATS API error, timeout, or programming mistake such as a missing client. */
   other,
 };
 
@@ -89,10 +90,10 @@ struct Message {
 /**
  * @brief Coroutine started for each message on a route subscription.
  *
- * The read loop starts the handler on the worker pool and does not wait for
- * it. A slow handler does not stall the socket. Client calls from the handler
- * return to the IO thread before they touch the socket. A thrown exception is
- * logged and the connection stays up.
+ * The NATS C client invokes the callback for each message. The wrapper starts
+ * the handler on the worker pool and does not wait for it. A slow handler does
+ * not stall socket processing. A thrown exception is logged and the connection
+ * stays up.
  */
 using MessageHandler = std::function<boost::cobalt::task<void>(Message)>;
 
@@ -211,8 +212,10 @@ class Client {
   /**
    * @brief Publish `payload` and return the body of the reply.
    *
-   * Subscribes a one-shot inbox, publishes with that inbox as the reply
-   * subject, and waits for one response.
+   * Uses the NATS C request API and waits up to 30 seconds for one response.
+   *
+   * @throws Error The client is empty, the request fails, or no reply arrives
+   * before the timeout.
    */
   auto request(std::string subject, std::string payload) -> boost::cobalt::task<std::string>;
 
@@ -243,15 +246,15 @@ class Client {
 /**
  * @brief Open a connection to `nats://host:port`.
  *
- * Resolves the host, connects, reads `INFO`, and sends `CONNECT` and `PING`.
- * After `PONG` the read loop owns the socket. A stop request that arrives
- * during connect closes the new socket and throws `ErrorKind::signal`.
+ * Connects through the NATS C client using the process-wide Asio event loop.
+ * A stop request that arrives during connect closes the new connection and
+ * throws `ErrorKind::signal`.
  *
  * @param url Server URL. The scheme is `nats://`. The port defaults to 4222.
  * @return A client sharing the new connection.
- * @throws Error Kind `unreachable` when resolve or TCP connect fails, kind
- * `interrupted` when the handshake fails, or kind `signal` when the process
- * is stopping.
+ * @throws Error Kind `unreachable` when the connection cannot be established,
+ * kind `interrupted` when the established connection is permanently lost, or
+ * kind `signal` when the process is stopping.
  */
 auto connect(std::string url) -> boost::cobalt::task<Client>;
 

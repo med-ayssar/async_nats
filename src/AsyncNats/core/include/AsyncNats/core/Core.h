@@ -20,6 +20,7 @@ class io_context;
 namespace AsyncNats {
 
 class EventLoop;
+class AsyncNatsEventLoop;
 
 /**
  * @brief Process-wide runtime: one IO thread and a worker pool.
@@ -52,6 +53,7 @@ class Core {
 
  private:
   friend class EventLoop;
+  friend class AsyncNatsEventLoop;
 
   /** @brief The `io_context` the IO thread is running. */
   auto ioContext() -> boost::asio::io_context&;

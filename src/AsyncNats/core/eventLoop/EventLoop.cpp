@@ -8,6 +8,7 @@
 #include <boost/asio/signal_set.hpp>
 #include <boost/cobalt/op.hpp>
 #include <boost/cobalt/spawn.hpp>
+#include <nats/nats.h>
 #include <spdlog/spdlog.h>
 
 #include <csignal>
@@ -72,23 +73,36 @@ auto EventLoop::run(int argc, char** argv) -> int {
     }
   });
 
-  boost::cobalt::spawn(runtime.ioContext(), co_main(argc, argv), [&](std::exception_ptr exception, int result) {
-    if (exception) {
-      try {
-        std::rethrow_exception(exception);
-      } catch (const std::exception& error) {
-        spdlog::error("Exception {}\n", error.what());
-      }
-    } else {
-      spdlog::info("co_main returned {}", result);
-    }
-
-    if (impl_->signals) {
-      impl_->signals->cancel();
-    }
-    runtime.release();
-    finished.set_value();
-  });
+  boost::cobalt::spawn(runtime.ioContext(), co_main(argc, argv),
+                       [&, mainException = std::exception_ptr{}](std::exception_ptr exception, int result) mutable {
+                         mainException = std::move(exception);
+                         boost::cobalt::spawn(
+                             runtime.ioContext(), closeAllClients(Error("event loop stopped", ErrorKind::closed)),
+                             [&, mainException = std::move(mainException), result](std::exception_ptr closeException) {
+                               if (mainException) {
+                                 try {
+                                   std::rethrow_exception(mainException);
+                                 } catch (const std::exception& error) {
+                                   spdlog::error("Exception {}\n", error.what());
+                                 }
+                               } else {
+                                 spdlog::info("co_main returned {}", result);
+                               }
+                               if (closeException) {
+                                 try {
+                                   std::rethrow_exception(closeException);
+                                 } catch (const std::exception& error) {
+                                   spdlog::error("closing NATS clients failed: {}", error.what());
+                                 }
+                               }
+                               nats_Close();
+                               if (impl_->signals) {
+                                 impl_->signals->cancel();
+                               }
+                               runtime.release();
+                               finished.set_value();
+                             });
+                       });
 
   finished.get_future().wait();
   runtime.join();

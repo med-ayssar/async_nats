@@ -7,16 +7,16 @@ The generated page is [`Error`](/doxygen/class_async_nats_1_1_error.html). Every
 
 | What happened | Kind | What the library does |
 | --- | --- | --- |
-| Resolve or TCP connect fails | `unreachable` | Log, run `onError`, then `connect` throws |
-| The socket dies, the peer sends EOF, or the handshake fails | `interrupted` | Log, run `onError`, fail waiters, throw |
+| The NATS C client cannot establish the connection | `unreachable` | Log, run `onError`, then `connect` throws |
+| The NATS C client permanently loses an established connection | `interrupted` | Log, run `onError`, fail waiters, throw |
 | `Client::close()` | `closed` | Resume waiters. No log and no `onError` |
 | `SIGINT` or `SIGTERM` | `signal` | Close tracked clients first, then log and run `onError` |
-| A `-ERR` on a live connection, or a programming mistake such as a missing client | `other` | Log and report when it comes from the read loop |
+| A NATS API error, request timeout, or programming mistake such as a missing client | `other` | Log and report |
 
 The messages are:
 
-- `NATS server at host:port is not reachable: ...`
-- `connection to NATS server host:port was interrupted: ...`
+- `NATS connection failed: ...`
+- `NATS connection closed`
 - `received SIGINT, closing NATS client` or `received SIGTERM, closing NATS client`
 
 ## onError
@@ -34,7 +34,7 @@ Call `onError` before the first `co_await` in `co_main`. Kind `closed` does not 
 
 ## Signals
 
-`watchSignals` is already waiting before `co_main` starts. `SIGKILL` cannot be caught. A normal exit cancels the signal set; the wait completes with `operation_aborted`, and the watcher returns without closing clients.
+`watchSignals` is already waiting before `co_main` starts. `SIGKILL` cannot be caught. A normal exit closes tracked connections while the Asio event loop is alive, then cancels the signal set and shuts down the NATS library.
 
 On `SIGINT` or `SIGTERM` the watcher:
 
