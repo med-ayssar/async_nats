@@ -13,7 +13,6 @@
 #pragma once
 
 #include <boost/cobalt/task.hpp>
-
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -85,6 +84,8 @@ struct Message {
   std::string payload;
   /** Set when the publisher supplied a reply subject. */
   std::optional<std::string> reply;
+  /** True when the server reports that a request had no responders. */
+  bool noResponders = false;
 };
 
 /**
@@ -97,7 +98,11 @@ struct Message {
  */
 using MessageHandler = std::function<boost::cobalt::task<void>(Message)>;
 
-/** @brief Subject and the handler that receives its messages. */
+/**
+ * @brief Subject and the handler that receives its messages.
+ *
+ * Passed to `Client::subscribe` and to `Client::queue`.
+ */
 struct Route {
   std::string subject;
   MessageHandler handler;
@@ -187,9 +192,56 @@ class Client {
    * @brief Send `UNSUB` for every route on these subjects and drop the handlers.
    *
    * Subjects that were never subscribed are skipped. An empty list does
-   * nothing.
+   * nothing. Handlers added with `queue` stay up until
+   * `unsubscribe(group, subjects)`.
    */
   auto unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void>;
+
+  /**
+   * @brief Send `UNSUB` for queue `group` on these subjects and drop the handlers.
+   *
+   * Subjects that were never queued on `group` are skipped. An empty list does
+   * nothing. A pull subscription from `queue(group, subject)` stays up until
+   * `Subscription::unsubscribe`. Routes from `subscribe` stay up.
+   */
+  auto unsubscribe(std::string group, std::vector<std::string> subjects)
+      -> boost::cobalt::task<void>;
+
+  /**
+   * @brief Queue on `group` and pull messages on `subject`.
+   *
+   * The server gives each message on `subject` to one member of `group`.
+   * `Subscription::next` returns the messages this member receives.
+   *
+   * @throws Error The client is empty, `group` or `subject` is invalid, or the
+   * write fails.
+   */
+  auto queue(std::string group, std::string subject) -> boost::cobalt::task<Subscription>;
+
+  /**
+   * @brief Queue on `group` with one handler.
+   *
+   * The handler is one member of `group`. A message on `route.subject` starts
+   * it on the worker pool.
+   *
+   * @throws Error The client is empty, `group`, the subject, or the handler is
+   * invalid, or the write fails.
+   */
+  auto queue(std::string group, Route route) -> boost::cobalt::task<void>;
+
+  /**
+   * @brief Queue on `group` with one or more handlers.
+   *
+   * Each route is its own member. Members that share a subject share that
+   * subject's messages, and the server picks one of them for each message.
+   * Members on different subjects receive their own subjects. An empty list
+   * does nothing. Duplicate subjects become separate members. If a
+   * subscription fails, the members just added are dropped.
+   *
+   * @throws Error The client is empty, `group`, a subject, or a handler is
+   * invalid, or the write fails.
+   */
+  auto queue(std::string group, std::vector<Route> routes) -> boost::cobalt::task<void>;
 
   /**
    * @brief Shut the socket down and wake waiters with `ErrorKind::closed`.
@@ -227,6 +279,26 @@ class Client {
   auto request(std::string subject, std::string payload,
                std::vector<std::pair<std::string, std::string>> headers)
       -> boost::cobalt::task<std::string>;
+
+  /**
+   * @brief Publish `payload` to the reply subject of `message`.
+   *
+   * This is the response half of a request. `request` sends the request and
+   * returns the response body.
+   *
+   * @throws Error The client is empty, `message` has no reply subject, or the
+   * write fails.
+   */
+  auto respond(const Message& message, std::string payload) -> boost::cobalt::task<void>;
+
+  /**
+   * @brief `respond` with NATS headers.
+   *
+   * Each pair is a header name and its value.
+   */
+  auto respond(const Message& message, std::string payload,
+               std::vector<std::pair<std::string, std::string>> headers)
+      -> boost::cobalt::task<void>;
 
  private:
   struct Impl;

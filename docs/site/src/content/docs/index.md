@@ -26,8 +26,10 @@ The integer `co_main` returns is logged. The process exits 0 unless an exception
 | [How it runs](/runtime/) | Startup, the read loop, and how a subscription waits |
 | [Core](/core/) | `Core::instance()`, the IO thread, and the worker pool |
 | [Core implementation overview](/implementation/) | The runtime, signals, and `packageFor` / `shellFor` |
-| [Client](/client/) | Connect, publish, subscribe, request, close |
+| [Client](/client/) | Connect, publish, subscribe, request, queue groups, close |
 | [Errors and signals](/errors/) | `ErrorKind`, `onError`, `SIGINT`, and `SIGTERM` |
 | [JetStream](/jetstream/) | Key-value and the object store |
 
 `examples/pub_sub.cpp` connects, subscribes, publishes, and reads one message. Build it with `-DBUILD_TESTS=ON`. It uses `NATS_URL`, or `nats://127.0.0.1:4222`.
+
+`examples/request_reply.cpp` queues one handler and two handlers, then requests a reply from each subject. The executable is `request_reply`. It uses the same `NATS_URL`.

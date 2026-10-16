@@ -34,11 +34,12 @@ serialized on the IO context.
 
 ## Subscriptions
 
-Both subscription forms use the native C message callback. Pull subscriptions
+Subscription forms use the native C message callback. Pull subscriptions
 queue copied messages for `Subscription::next()`. Route subscriptions start
-their `MessageHandler` on the worker pool. The callback copies the subject,
-payload, and optional reply subject, destroys the native `natsMsg`, and then
-posts the copy to AsyncNats.
+their `MessageHandler` on the worker pool. Queue members use
+`natsConnection_QueueSubscribe` for the same two forms. The callback copies the
+subject, payload, and optional reply subject, destroys the native `natsMsg`,
+and then posts the copy to AsyncNats.
 
 JetStream helpers continue to use the public `Client` operations and therefore
 share the same native connection and event loop.

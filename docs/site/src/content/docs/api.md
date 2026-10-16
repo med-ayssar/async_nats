@@ -75,7 +75,33 @@ Subscribe each route and start its handler for every message. It returns after e
 auto unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void>;
 ```
 
-Unsubscribe every route on these subjects and drop the handlers. Unknown subjects are skipped. An empty list does nothing.
+Unsubscribe every route on these subjects and drop the handlers. Unknown subjects are skipped. An empty list does nothing. Handlers added with `queue` stay up until `unsubscribe(group, subjects)`.
+
+```cpp
+auto unsubscribe(std::string group, std::vector<std::string> subjects) -> boost::cobalt::task<void>;
+```
+
+Unsubscribe queue `group` on these subjects and drop those handlers. Unknown subjects are skipped. An empty list does nothing. A pull subscription from `queue(group, subject)` stays up until `Subscription::unsubscribe`. Routes from `subscribe` stay up.
+
+### `Client::queue`
+
+```cpp
+auto queue(std::string group, std::string subject) -> boost::cobalt::task<Subscription>;
+```
+
+Queue on `group` and return a pull handle for `subject`. The server gives each message on `subject` to one member of `group`. Throws when the client is empty, `group` or `subject` is invalid, or the C API rejects the subscription.
+
+```cpp
+auto queue(std::string group, Route route) -> boost::cobalt::task<void>;
+```
+
+Queue on `group` with one handler. The handler is one member. A message on `route.subject` starts it on the worker pool.
+
+```cpp
+auto queue(std::string group, std::vector<Route> routes) -> boost::cobalt::task<void>;
+```
+
+Queue on `group` with one or more handlers. Each route is its own member. Members that share a subject share that subject's messages, and the server picks one member for each message. Members on different subjects receive their own subjects. An empty list does nothing. Duplicate subjects become separate members. If a subscription fails, the members just added are dropped. Throws when the client is empty, `group`, a subject, or a handler is invalid, or the C API rejects a subscription.
 
 ### `Client::request`
 
@@ -83,7 +109,7 @@ Unsubscribe every route on these subjects and drop the handlers. Unknown subject
 auto request(std::string subject, std::string payload) -> boost::cobalt::task<std::string>;
 ```
 
-Publish `payload` and return the body of the reply. Uses the native request API and waits up to 30 seconds for a response.
+Publish `payload` and return the body of the reply. Subscribes a one-shot inbox, publishes the request with that inbox as the reply subject, and waits up to 30 seconds. The wait does not occupy a worker thread. A server status `503` throws.
 
 ```cpp
 auto request(std::string subject, std::string payload,
@@ -92,6 +118,22 @@ auto request(std::string subject, std::string payload,
 ```
 
 The same call with NATS headers. Each pair is a header name and its value. Both overloads throw if the request fails or the timeout expires.
+
+### `Client::respond`
+
+```cpp
+auto respond(const Message& message, std::string payload) -> boost::cobalt::task<void>;
+```
+
+Publish `payload` to `message.reply`. This is the response half of `request`. Throws when the client is empty, `message` has no reply subject, or the C API rejects the publish.
+
+```cpp
+auto respond(const Message& message, std::string payload,
+             std::vector<std::pair<std::string, std::string>> headers)
+    -> boost::cobalt::task<void>;
+```
+
+The same call with NATS headers. Each pair is a header name and its value.
 
 ### `Client::close`
 
@@ -140,10 +182,11 @@ struct Message {
   std::string subject;
   std::string payload;
   std::optional<std::string> reply;
+  bool noResponders = false;
 };
 ```
 
-One inbound NATS message. `reply` is set when the publisher supplied a reply subject.
+One inbound NATS message. `reply` is set when the publisher supplied a reply subject. `noResponders` is true when the server sends status `503` because the request subject had no subscribers. `request` turns that message into an error.
 
 ### `MessageHandler`
 
@@ -162,7 +205,7 @@ struct Route {
 };
 ```
 
-The subject and the handler that receives its messages. Passed to `Client::subscribe(vector<Route>)`.
+The subject and the handler that receives its messages. Passed to `Client::subscribe(vector<Route>)` and `Client::queue`.
 
 ## Errors
 

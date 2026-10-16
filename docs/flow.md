@@ -25,7 +25,9 @@ The pull-subscription path uses a NATS asynchronous subscription callback to
 queue messages for `Subscription::next()`. A parked `next()` is resumed on its
 executor when a message arrives, the subscription is removed, or the connection
 closes. The route path uses the same native callback and starts each
-`MessageHandler` on the worker pool without waiting for it.
+`MessageHandler` on the worker pool without waiting for it. Queue members use
+`natsConnection_QueueSubscribe` on that same callback, either as a pull
+subscription or as one or more handlers.
 
 The callback copies the subject, payload, and optional reply subject from the
 native `natsMsg`, then destroys the C message before posting the copy to the

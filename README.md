@@ -35,6 +35,8 @@ boost::asio::post(AsyncNats::Core::instance().threadPool(), [] {
 
 `examples/pub_sub.cpp` connects, subscribes, publishes, and reads the message back. Build it with `-DBUILD_TESTS=ON`; the executable is `pub_sub`. It uses `NATS_URL`, or `nats://127.0.0.1:4222`.
 
+`examples/request_reply.cpp` queues one handler and two handlers, then sends a request to each subject. The executable is `request_reply`. It uses the same `NATS_URL`.
+
 ```cpp
 auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");
 auto subscription = co_await client.subscribe("async_nats.example");
@@ -61,6 +63,16 @@ co_await client.subscribe({
      }},
 });
 co_await client.unsubscribe({"Grok"});
+```
+
+`request` publishes and returns the reply body. A handler answers with `respond`. `queue` adds one handler, or many, to a queue group. The server gives each message to one member of the group. `unsubscribe` takes that queue and the subjects to drop.
+
+```cpp
+co_await client.queue("workers", {"service.echo",
+    [&client](AsyncNats::Message message) -> boost::cobalt::task<void> {
+      co_await client.respond(message, message.payload);
+    }});
+auto body = co_await client.request("service.echo", "ping");
 ```
 
 The build uses Nix. C++ standard is 23. Choose Clang or GCC.
