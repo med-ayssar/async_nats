@@ -143,6 +143,22 @@ auto copyMessage(natsMsg* native) -> Message {
   return result;
 }
 
+void logSubscribed(std::string_view subject, const std::optional<std::string>& queue) {
+  if (queue.has_value()) {
+    spdlog::info("queued {} on {}", subject, *queue);
+    return;
+  }
+  spdlog::info("subscribed to {}", subject);
+}
+
+void logUnsubscribed(std::string_view subject, const std::optional<std::string>& queue) {
+  if (queue.has_value()) {
+    spdlog::info("unsubscribed from {} on queue {}", subject, *queue);
+    return;
+  }
+  spdlog::info("unsubscribed from {}", subject);
+}
+
 }  // namespace
 
 struct Client::Impl : std::enable_shared_from_this<Client::Impl> {
@@ -167,6 +183,7 @@ struct Client::Impl : std::enable_shared_from_this<Client::Impl> {
     std::optional<Waiter> waiter;
     bool open = true;
     std::string subject;
+    std::optional<std::string> queue;
   };
 
   natsConnection* native = nullptr;
@@ -648,6 +665,7 @@ auto Client::subscribe(std::string subject) -> boost::cobalt::task<Subscription>
   subscription->subject = std::move(subject);
   impl_->subscriptions.push_back(subscription);
   co_await impl_->openSubscription(subscription, std::nullopt);
+  logSubscribed(subscription->subject, std::nullopt);
   auto state = std::make_shared<Subscription::State>();
   state->connection = impl_;
   state->subscription = std::move(subscription);
@@ -696,6 +714,9 @@ auto Client::subscribe(std::vector<Route> routes) -> boost::cobalt::task<void> {
     }
     std::rethrow_exception(failure);
   }
+  for (const auto& subscription : added) {
+    logSubscribed(subscription->subject, std::nullopt);
+  }
 }
 
 auto Client::unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::task<void> {
@@ -716,6 +737,7 @@ auto Client::unsubscribe(std::vector<std::string> subjects) -> boost::cobalt::ta
     for (auto& subscription : subscriptions) {
       co_await impl_->unsubscribe(subscription);
     }
+    logUnsubscribed(subject, std::nullopt);
   }
 }
 
@@ -730,8 +752,10 @@ auto Client::queue(std::string group, std::string subject) -> boost::cobalt::tas
   auto subscription = std::make_shared<Impl::SubState>();
   subscription->connection = impl_;
   subscription->subject = std::move(subject);
+  subscription->queue = group;
   impl_->subscriptions.push_back(subscription);
   co_await impl_->openSubscription(subscription, group);
+  logSubscribed(subscription->subject, subscription->queue);
   auto state = std::make_shared<Subscription::State>();
   state->connection = impl_;
   state->subscription = std::move(subscription);
@@ -766,6 +790,7 @@ auto Client::queue(std::string group, std::vector<Route> routes) -> boost::cobal
       auto subscription = std::make_shared<Impl::SubState>();
       subscription->connection = impl_;
       subscription->subject = route.subject;
+      subscription->queue = group;
       subscription->handler = std::move(route.handler);
       impl_->subscriptions.push_back(subscription);
       added.push_back(subscription);
@@ -796,6 +821,9 @@ auto Client::queue(std::string group, std::vector<Route> routes) -> boost::cobal
     }
     std::rethrow_exception(failure);
   }
+  for (const auto& subscription : added) {
+    logSubscribed(subscription->subject, subscription->queue);
+  }
 }
 
 auto Client::unsubscribe(std::string group, std::vector<std::string> subjects)
@@ -813,6 +841,7 @@ auto Client::unsubscribe(std::string group, std::vector<std::string> subjects)
     co_return;
   }
   std::vector<std::shared_ptr<Impl::SubState>> dropping;
+  std::vector<std::string> dropped;
   for (const auto& subject : subjects) {
     auto subjectsFound = found->second.find(subject);
     if (subjectsFound == found->second.end()) {
@@ -821,12 +850,16 @@ auto Client::unsubscribe(std::string group, std::vector<std::string> subjects)
     dropping.insert(dropping.end(), std::make_move_iterator(subjectsFound->second.begin()),
                     std::make_move_iterator(subjectsFound->second.end()));
     found->second.erase(subjectsFound);
+    dropped.push_back(subject);
   }
   if (found->second.empty()) {
     impl_->queues.erase(found);
   }
   for (auto& subscription : dropping) {
     co_await impl_->unsubscribe(subscription);
+  }
+  for (const auto& subject : dropped) {
+    logUnsubscribed(subject, group);
   }
 }
 
@@ -868,7 +901,10 @@ auto Subscription::unsubscribe() -> boost::cobalt::task<void> {
   if (!state_ || !state_->connection || !state_->subscription) {
     co_return;
   }
+  const auto subject = state_->subscription->subject;
+  const auto queue = state_->subscription->queue;
   co_await state_->connection->unsubscribe(state_->subscription);
+  logUnsubscribed(subject, queue);
   state_->connection.reset();
   state_->subscription.reset();
 }
