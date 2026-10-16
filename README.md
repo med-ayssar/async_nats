@@ -77,7 +77,7 @@ auto body = co_await client.request("service.echo", "ping");
 
 The build uses Nix. C++ standard is 23. Choose Clang or GCC.
 
-Public dependencies come from nixpkgs: Boost 1.90 and spdlog. Nixpkgs does not ship Cobalt, so `overlays.default` builds that library with C++23 and replaces `pkgs.boost190`.
+Public dependencies come from nixpkgs and are listed once in `deps/default.nix`: Boost 1.90, spdlog, OpenSSL, and libnats-c. Every package and dev shell uses that set. Nixpkgs does not ship Cobalt, so `overlays.default` builds that library with C++23 and replaces `pkgs.boost190`.
 
 Private dependencies go in `libraries/default.nix`. Pin each one in `flake.nix` by branch (`?ref=`) or commit (`?rev=`), then add it to the set. The set is empty until you declare one:
 

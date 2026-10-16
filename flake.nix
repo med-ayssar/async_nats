@@ -20,6 +20,8 @@
           boost = prev.boost190;
         };
       };
+      # One set for every packageFor and shellFor derivation.
+      deps = pkgs: import ./deps { inherit pkgs; };
       stdenvOf =
         prev: compiler:
         if compiler == "gcc" then prev.gccStdenv else prev.clangStdenv;
@@ -53,15 +55,12 @@
             inherit system compiler;
           };
           cmakeBuildType = if buildType == "debug" then "Debug" else "Release";
+          common = deps pkgs;
         in
         pkgs.callPackage ./package.nix {
           inherit stdenv libraries withTests;
           buildType = cmakeBuildType;
-          boost = pkgs.boost190;
-          spdlog = pkgs.spdlog;
-          openssl = pkgs.openssl;
-          libnats-c = pkgs.libnats-c;
-          catch2_3 = pkgs.catch2_3;
+          deps = common;
         };
       shellFor =
         system: compiler:
@@ -82,12 +81,9 @@
             pkgs.cmake
             pkgs.ninja
             pkgs.clang-tools
-            pkgs.boost190
-            pkgs.spdlog
-            pkgs.openssl
-            pkgs.libnats-c
             pkgs.catch2_3
           ]
+          ++ builtins.attrValues (deps pkgs)
           ++ builtins.attrValues libraries;
         };
     in
@@ -132,5 +128,6 @@
     )
     // {
       overlays.default = boostOverlay;
+      inherit deps;
     };
 }

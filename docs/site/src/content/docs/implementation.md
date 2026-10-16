@@ -36,7 +36,7 @@ Both functions live in the `let` of `flake.nix`. `eachDefaultSystem` calls them 
 1. A compiler overlay. When the chosen stdenv differs from nixpkgs’ default stdenv, it rebuilds `boost190` and `spdlog` with that stdenv. On Darwin the default stdenv is already Clang, so the Clang path leaves both packages as nixpkgs built them. The GCC path rebuilds both with GCC.
 2. `overlays.default`, from `nix/boost-with-cobalt.nix`. Nixpkgs Boost 1.90 ships Cobalt headers and does not build `libboost_cobalt` unless b2 is passed `cxxstd=23`. This overlay replaces `pkgs.boost190` with that C++23 build. It sees the package the compiler overlay produced, so a GCC package builds Cobalt with GCC.
 
-`libraries/default.nix` is the optional private-dependency set. It is empty in this repository. `libnats-c` is a direct nixpkgs dependency passed to `packageFor` and `shellFor`.
+`deps/default.nix` is the shared nixpkgs set: Boost 1.90, spdlog, OpenSSL, and `libnats-c`. `packageFor` and `shellFor` both apply that whole set, so every package and every dev shell gets OpenSSL from one list. `libraries/default.nix` is the optional private-dependency set. It is empty in this repository. A dependency added there lands in the package and in the shell the same way.
 
 ### `packageFor` in this repository
 
@@ -53,7 +53,7 @@ The four arguments select one derivation:
 | `buildType` | `"debug"` or `"release"` | Mapped to the CMake string `"Debug"` or `"Release"`. Any other string becomes `"Release"`. |
 | `withTests` | `true` or `false` | Adds Catch2, passes `-DBUILD_TESTS=ON`, and runs `ctest` in `checkPhase`. |
 
-`pkgs.callPackage ./package.nix` fills `cmake`, `ninja`, and `lib` from that package set and receives `stdenv`, `boost`, `spdlog`, `openssl`, `libnats-c`, `catch2_3`, `libraries`, `withTests`, and `buildType` explicitly. `package.nix` sets `cmakeBuildType = buildType`. When `buildType` is `"Debug"` it also sets `dontStrip`, so the static archive keeps its DWARF. A Release build is stripped as usual.
+`pkgs.callPackage ./package.nix` fills `cmake`, `ninja`, `catch2_3`, and `lib` from that package set and receives `stdenv`, `deps`, `libraries`, `withTests`, and `buildType`. `deps` is the shared set from `deps/default.nix`. `package.nix` puts that set in `buildInputs` and `propagatedBuildInputs`, and sets `cmakeBuildType = buildType`. When `buildType` is `"Debug"` it also sets `dontStrip`, so the static archive keeps its DWARF. A Release build is stripped as usual.
 
 `CMakeLists.txt` sets `CMAKE_MAP_IMPORTED_CONFIG_DEBUG` to `Release RelWithDebInfo ""`. A Debug build of this library can therefore link the Release Boost and spdlog that Nix installed. That map belongs to the library. An application that wants the Debug archive uses its own map.
 
@@ -78,7 +78,7 @@ Nix copies the Git tree of this flake into the build. A dirty tracked file is in
 shellFor = system: compiler: ...
 ```
 
-There is no `buildType` and no `withTests`. The shell is a compiler toolchain, not a library build. `(pkgs.mkShell.override { inherit stdenv; })` makes `nix develop` use Clang or GCC. Its hook sets `CXX` to that compiler and sources `env/main.sh`; `packages` includes cmake, ninja, clang-tools, `boost190`, spdlog, openssl, Catch2, `libnats-c`, and the private `libraries` set. The shell does not contain `libAsyncNats.a`.
+There is no `buildType` and no `withTests`. The shell is a compiler toolchain, not a library build. `(pkgs.mkShell.override { inherit stdenv; })` makes `nix develop` use Clang or GCC. Its hook sets `CXX` to that compiler and sources `env/main.sh`; `packages` includes cmake, ninja, clang-tools, Catch2, the shared `deps` set, and the private `libraries` set. The shell does not contain `libAsyncNats.a`.
 
 `devShells.default`, `devShells.clang`, and `devShells.async-nats-clang` are `shellFor system "clang"`. `devShells.gcc` and `devShells.async-nats-gcc` are `shellFor system "gcc"`. Each shell runs `env/main.sh` from its `shellHook`, exporting the compiler and clangd. Enter the matching shell before running `./build.sh`; the script invokes CMake directly, configures the selected compiler and build type, and installs to `./install`.
 

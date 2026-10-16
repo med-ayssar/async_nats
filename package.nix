@@ -3,15 +3,15 @@
   stdenv,
   cmake,
   ninja,
-  boost,
-  spdlog,
-  openssl,
-  libnats-c,
+  deps,
   libraries,
   catch2_3,
   withTests ? false,
   buildType ? "Debug",
 }:
+let
+  common = builtins.attrValues deps;
+in
 stdenv.mkDerivation {
   pname = "AsyncNats";
   version = "0.1.0";
@@ -41,21 +41,9 @@ stdenv.mkDerivation {
     catch2_3
   ];
 
-  buildInputs = [
-    boost
-    spdlog
-    openssl
-    libnats-c
-  ]
-  ++ builtins.attrValues libraries;
+  buildInputs = common ++ builtins.attrValues libraries;
 
-  propagatedBuildInputs = [
-    boost
-    spdlog
-    openssl
-    libnats-c
-  ]
-  ++ builtins.attrValues libraries;
+  propagatedBuildInputs = common ++ builtins.attrValues libraries;
 
   cmakeBuildType = buildType;
 
