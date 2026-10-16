@@ -497,44 +497,48 @@ struct Client::Impl : std::enable_shared_from_this<Client::Impl> {
       native = nullptr;
     }
     if (connection != nullptr) {
+      for (const auto& sub : subscriptions) {
+        if (sub->native.load() != nullptr) {
+          logUnsubscribed(sub->subject, sub->queue);
+        }
+      }
+      spdlog::default_logger()->flush();
       auto self = shared_from_this();
       auto subs = subscriptions;
-      using Dropped = std::pair<std::string, std::optional<std::string>>;
-      auto dropped = co_await runBlocking(
-          executor, [self = std::move(self), connection, subs = std::move(subs)] {
-            {
-              std::unique_lock lock(self->nativeMutex);
-              self->nativeDrained.wait(lock, [&] { return self->nativeCalls == 0; });
-            }
-            std::vector<Dropped> done;
-            for (auto& sub : subs) {
-              auto* nativeSub = sub->native.exchange(nullptr);
-              if (nativeSub == nullptr) {
-                continue;
-              }
-              const auto status = natsSubscription_Unsubscribe(nativeSub);
-              if (status == NATS_OK) {
-                done.emplace_back(sub->subject, sub->queue);
-              } else {
-                spdlog::error("unsubscribe: {}", statusText(status));
-              }
-              natsSubscription_Destroy(nativeSub);
-            }
-            const auto flushed = natsConnection_FlushTimeout(connection, kShutdownFlushMs);
-            if (flushed != NATS_OK && flushed != NATS_CONNECTION_CLOSED) {
-              spdlog::error("unsubscribe: {}", statusText(flushed));
-            }
-            natsConnection_Close(connection);
-            natsConnection_Destroy(connection);
-            return done;
-          });
-      for (const auto& [subject, queue] : dropped) {
-        logUnsubscribed(subject, queue);
-      }
-      routes.clear();
-      queues.clear();
-      subscriptions.clear();
+      co_await runBlocking(executor, [self = std::move(self), connection, subs = std::move(subs)] {
+        {
+          std::unique_lock lock(self->nativeMutex);
+          self->nativeDrained.wait(lock, [&] { return self->nativeCalls == 0; });
+        }
+        for (auto& sub : subs) {
+          auto* nativeSub = sub->native.exchange(nullptr);
+          if (nativeSub == nullptr) {
+            continue;
+          }
+          const auto status = natsSubscription_Unsubscribe(nativeSub);
+          if (status != NATS_OK) {
+            spdlog::error("unsubscribe: {}", statusText(status));
+            spdlog::default_logger()->flush();
+          }
+          natsSubscription_Destroy(nativeSub);
+        }
+        const auto flushed = natsConnection_FlushTimeout(connection, kShutdownFlushMs);
+        if (flushed != NATS_OK && flushed != NATS_CONNECTION_CLOSED) {
+          spdlog::error("unsubscribe: {}", statusText(flushed));
+          spdlog::default_logger()->flush();
+        }
+        natsConnection_Close(connection);
+        natsConnection_Destroy(connection);
+      });
     }
+    for (auto& sub : subscriptions) {
+      sub->handler = nullptr;
+      sub->messages.clear();
+      sub->open = false;
+    }
+    routes.clear();
+    queues.clear();
+    subscriptions.clear();
     std::erase_if(sessions().clients, [this](const auto& client) { return client.get() == this; });
   }
 
@@ -886,12 +890,14 @@ auto Client::unsubscribe(std::string group, std::vector<std::string> subjects)
   }
 }
 
-auto Client::close() -> boost::cobalt::task<void> {
+auto Client::disconnect() -> boost::cobalt::task<void> {
   if (!impl_) {
     co_return;
   }
   co_await impl_->shutdown("connection closed", ErrorKind::closed);
 }
+
+auto Client::close() -> boost::cobalt::task<void> { co_await disconnect(); }
 
 auto Client::closed() -> boost::cobalt::task<void> {
   if (!impl_) {
