@@ -531,7 +531,7 @@ Log `failure` and run `onError`. Kind `closed` is not logged and does not run th
 auto closeAllClients(const Error& failure) -> boost::cobalt::task<void>;
 ```
 
-Close every tracked client with `failure`, which wakes parked `closed()` and `next()` calls.
+Unsubscribe every topic on every tracked client, then close the client with `failure`. That wakes parked `closed()` and `next()` calls.
 
 ### `requestStop`
 

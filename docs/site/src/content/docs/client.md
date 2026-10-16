@@ -80,6 +80,6 @@ co_await client.close();
 co_await client.closed();
 ```
 
-`close()` closes the C client connection and wakes waiters with `ErrorKind::closed`. It does not log and does not run `onError`. An empty client returns immediately.
+`close()` unsubscribes every topic, closes the C client connection, and wakes waiters with `ErrorKind::closed`. It does not log the close and does not run `onError`. An empty client returns immediately. `SIGINT` and `SIGTERM` take this same path.
 
 `closed()` suspends until the connection fails or `close()` runs, then throws the stored `error`. The first reason sticks. A later failure does not replace it.

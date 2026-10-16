@@ -38,7 +38,7 @@ coroutine side. JetStream helpers continue to use the public `Client` API.
 NATS connection and asynchronous error callbacks translate native errors into
 `AsyncNats::Error`, log them, and run the registered `onError` handler. Explicit
 close and process shutdown fail parked waiters with the corresponding error
-kind. A signal closes tracked clients before invoking `onError`.
+kind. A signal unsubscribes every topic, then closes tracked clients before invoking `onError`.
 
 The implementation files are `src/AsyncNats/client/Client.cpp`,
 `src/AsyncNats/core/eventLoop/NatsEventLoop.cpp`, and

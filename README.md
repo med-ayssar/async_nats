@@ -46,7 +46,7 @@ auto message = co_await subscription.next();
 
 `connect` throws `AsyncNats::Error` when the server cannot be reached. A later dropped connection completes `closed()` with `ErrorKind::interrupted`. Both are logged. `Error::kind()` is `unreachable`, `interrupted`, `closed`, `signal`, or `other`.
 
-The library handles `SIGINT` and `SIGTERM`. It closes every client, logs the signal, then runs the handler registered with `onError`. That handler receives the `Error` so the application can do extra work. `SIGKILL` cannot be handled. Call `onError` before the first `co_await` in `co_main`.
+The library handles `SIGINT` and `SIGTERM`. It unsubscribes every topic, closes every client, logs the signal, then runs the handler registered with `onError`. That handler receives the `Error` so the application can do extra work. `SIGKILL` cannot be handled. Call `onError` before the first `co_await` in `co_main`.
 
 ```cpp
 AsyncNats::onError([](AsyncNats::Error failure) -> boost::cobalt::task<void> {

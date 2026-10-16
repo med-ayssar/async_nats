@@ -14,7 +14,7 @@ CMake lists sources explicitly. `AsyncNatsObjects` contains the coroutine client
 
 ## Subscriptions and shutdown
 
-Pull subscriptions queue messages for `Subscription::next()`. Route subscriptions start their coroutine handler on the worker pool. Queue members use `natsConnection_QueueSubscribe` for either form: one pull subscription, or one or more handlers. Explicit unsubscribe and connection shutdown wake parked waiters with the appropriate `ErrorKind`.
+Pull subscriptions queue messages for `Subscription::next()`. Route subscriptions start their coroutine handler on the worker pool. Queue members use `natsConnection_QueueSubscribe` for either form: one pull subscription, or one or more handlers. Explicit unsubscribe and connection shutdown wake parked waiters with the appropriate `ErrorKind`. `SIGINT` and `SIGTERM` unsubscribe every live topic before the connection closes.
 
 When `co_main` completes, `EventLoop::run` closes tracked connections while the Asio loop is still running. That gives the C adapter time to release socket handles and call `natsConnection_ProcessDetachedEvent`. AsyncNats then calls `nats_Close` and joins the IO thread.
 

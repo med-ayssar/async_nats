@@ -10,7 +10,7 @@ The generated page is [`Error`](/doxygen/class_async_nats_1_1_error.html). Every
 | The NATS C client cannot establish the connection | `unreachable` | Log, run `onError`, then `connect` throws |
 | The NATS C client permanently loses an established connection | `interrupted` | Log, run `onError`, fail waiters, throw |
 | `Client::close()` | `closed` | Resume waiters. No log and no `onError` |
-| `SIGINT` or `SIGTERM` | `signal` | Close tracked clients first, then log and run `onError` |
+| `SIGINT` or `SIGTERM` | `signal` | Unsubscribe every topic, close tracked clients, then log and run `onError` |
 | A NATS API error, request timeout, or programming mistake such as a missing client | `other` | Log and report |
 
 The messages are:
@@ -39,7 +39,7 @@ Call `onError` before the first `co_await` in `co_main`. Kind `closed` does not 
 On `SIGINT` or `SIGTERM` the watcher:
 
 1. Sets the process-wide stop flag, so a `connect` still in progress throws kind `signal`.
-2. Closes every tracked client. A parked `closed()` or `next()` resumes and throws.
+2. Unsubscribes every topic on every tracked client, then closes the client. A parked `closed()` or `next()` resumes and throws.
 3. Logs the signal.
 4. Runs `onError`.
 

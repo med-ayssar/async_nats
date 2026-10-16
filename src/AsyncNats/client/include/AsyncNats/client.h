@@ -244,10 +244,11 @@ class Client {
   auto queue(std::string group, std::vector<Route> routes) -> boost::cobalt::task<void>;
 
   /**
-   * @brief Shut the socket down and wake waiters with `ErrorKind::closed`.
+   * @brief Unsubscribe every topic, shut the socket down, and wake waiters.
    *
-   * Does not log and does not run `onError`. An empty client returns
-   * immediately.
+   * Waiters resume with `ErrorKind::closed`. Does not log the close and does
+   * not run `onError`. An empty client returns immediately. `SIGINT` and
+   * `SIGTERM` take this same path.
    */
   auto close() -> boost::cobalt::task<void>;
 

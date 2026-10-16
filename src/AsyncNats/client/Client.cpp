@@ -33,6 +33,7 @@ namespace AsyncNats {
 namespace {
 
 constexpr std::int64_t kRequestTimeoutMs = 30'000;
+constexpr std::int64_t kShutdownFlushMs = 1'000;
 
 auto checkedLength(std::string_view value) -> int {
   if (value.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
@@ -498,19 +499,41 @@ struct Client::Impl : std::enable_shared_from_this<Client::Impl> {
     if (connection != nullptr) {
       auto self = shared_from_this();
       auto subs = subscriptions;
-      co_await runBlocking(executor, [self = std::move(self), connection, subs = std::move(subs)] {
-        {
-          std::unique_lock lock(self->nativeMutex);
-          self->nativeDrained.wait(lock, [&] { return self->nativeCalls == 0; });
-        }
-        natsConnection_Close(connection);
-        for (auto& sub : subs) {
-          if (auto* nativeSub = sub->native.exchange(nullptr)) {
-            natsSubscription_Destroy(nativeSub);
-          }
-        }
-        natsConnection_Destroy(connection);
-      });
+      using Dropped = std::pair<std::string, std::optional<std::string>>;
+      auto dropped = co_await runBlocking(
+          executor, [self = std::move(self), connection, subs = std::move(subs)] {
+            {
+              std::unique_lock lock(self->nativeMutex);
+              self->nativeDrained.wait(lock, [&] { return self->nativeCalls == 0; });
+            }
+            std::vector<Dropped> done;
+            for (auto& sub : subs) {
+              auto* nativeSub = sub->native.exchange(nullptr);
+              if (nativeSub == nullptr) {
+                continue;
+              }
+              const auto status = natsSubscription_Unsubscribe(nativeSub);
+              if (status == NATS_OK) {
+                done.emplace_back(sub->subject, sub->queue);
+              } else {
+                spdlog::error("unsubscribe: {}", statusText(status));
+              }
+              natsSubscription_Destroy(nativeSub);
+            }
+            const auto flushed = natsConnection_FlushTimeout(connection, kShutdownFlushMs);
+            if (flushed != NATS_OK && flushed != NATS_CONNECTION_CLOSED) {
+              spdlog::error("unsubscribe: {}", statusText(flushed));
+            }
+            natsConnection_Close(connection);
+            natsConnection_Destroy(connection);
+            return done;
+          });
+      for (const auto& [subject, queue] : dropped) {
+        logUnsubscribed(subject, queue);
+      }
+      routes.clear();
+      queues.clear();
+      subscriptions.clear();
     }
     std::erase_if(sessions().clients, [this](const auto& client) { return client.get() == this; });
   }
