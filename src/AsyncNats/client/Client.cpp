@@ -145,18 +145,18 @@ auto copyMessage(natsMsg* native) -> Message {
 
 void logSubscribed(std::string_view subject, const std::optional<std::string>& queue) {
   if (queue.has_value()) {
-    spdlog::info("queued {} on {}", subject, *queue);
+    spdlog::info("queued topic {} on queue {}", subject, *queue);
     return;
   }
-  spdlog::info("subscribed to {}", subject);
+  spdlog::info("subscribed to topic {}", subject);
 }
 
 void logUnsubscribed(std::string_view subject, const std::optional<std::string>& queue) {
   if (queue.has_value()) {
-    spdlog::info("unsubscribed from {} on queue {}", subject, *queue);
+    spdlog::info("unsubscribed from topic {} on queue {}", subject, *queue);
     return;
   }
-  spdlog::info("unsubscribed from {}", subject);
+  spdlog::info("unsubscribed from topic {}", subject);
 }
 
 }  // namespace
