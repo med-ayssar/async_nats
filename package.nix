@@ -5,6 +5,7 @@
   ninja,
   boost,
   spdlog,
+  openssl,
   libnats-c,
   libraries,
   catch2_3,
@@ -43,6 +44,7 @@ stdenv.mkDerivation {
   buildInputs = [
     boost
     spdlog
+    openssl
     libnats-c
   ]
   ++ builtins.attrValues libraries;
@@ -50,6 +52,7 @@ stdenv.mkDerivation {
   propagatedBuildInputs = [
     boost
     spdlog
+    openssl
     libnats-c
   ]
   ++ builtins.attrValues libraries;

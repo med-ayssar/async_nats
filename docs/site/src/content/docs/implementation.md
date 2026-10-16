@@ -53,7 +53,7 @@ The four arguments select one derivation:
 | `buildType` | `"debug"` or `"release"` | Mapped to the CMake string `"Debug"` or `"Release"`. Any other string becomes `"Release"`. |
 | `withTests` | `true` or `false` | Adds Catch2, passes `-DBUILD_TESTS=ON`, and runs `ctest` in `checkPhase`. |
 
-`pkgs.callPackage ./package.nix` fills `cmake`, `ninja`, and `lib` from that package set and receives `stdenv`, `boost`, `spdlog`, `libnats-c`, `catch2_3`, `libraries`, `withTests`, and `buildType` explicitly. `package.nix` sets `cmakeBuildType = buildType`. When `buildType` is `"Debug"` it also sets `dontStrip`, so the static archive keeps its DWARF. A Release build is stripped as usual.
+`pkgs.callPackage ./package.nix` fills `cmake`, `ninja`, and `lib` from that package set and receives `stdenv`, `boost`, `spdlog`, `openssl`, `libnats-c`, `catch2_3`, `libraries`, `withTests`, and `buildType` explicitly. `package.nix` sets `cmakeBuildType = buildType`. When `buildType` is `"Debug"` it also sets `dontStrip`, so the static archive keeps its DWARF. A Release build is stripped as usual.
 
 `CMakeLists.txt` sets `CMAKE_MAP_IMPORTED_CONFIG_DEBUG` to `Release RelWithDebInfo ""`. A Debug build of this library can therefore link the Release Boost and spdlog that Nix installed. That map belongs to the library. An application that wants the Debug archive uses its own map.
 
@@ -78,7 +78,7 @@ Nix copies the Git tree of this flake into the build. A dirty tracked file is in
 shellFor = system: compiler: ...
 ```
 
-There is no `buildType` and no `withTests`. The shell is a compiler toolchain, not a library build. `(pkgs.mkShell.override { inherit stdenv; })` makes `nix develop` use Clang or GCC. Its hook sets `CXX` to that compiler and sources `env/main.sh`; `packages` includes cmake, ninja, clang-tools, `boost190`, spdlog, Catch2, `libnats-c`, and the private `libraries` set. The shell does not contain `libAsyncNats.a`.
+There is no `buildType` and no `withTests`. The shell is a compiler toolchain, not a library build. `(pkgs.mkShell.override { inherit stdenv; })` makes `nix develop` use Clang or GCC. Its hook sets `CXX` to that compiler and sources `env/main.sh`; `packages` includes cmake, ninja, clang-tools, `boost190`, spdlog, openssl, Catch2, `libnats-c`, and the private `libraries` set. The shell does not contain `libAsyncNats.a`.
 
 `devShells.default`, `devShells.clang`, and `devShells.async-nats-clang` are `shellFor system "clang"`. `devShells.gcc` and `devShells.async-nats-gcc` are `shellFor system "gcc"`. Each shell runs `env/main.sh` from its `shellHook`, exporting the compiler and clangd. Enter the matching shell before running `./build.sh`; the script invokes CMake directly, configures the selected compiler and build type, and installs to `./install`.
 

@@ -59,6 +59,7 @@
           buildType = cmakeBuildType;
           boost = pkgs.boost190;
           spdlog = pkgs.spdlog;
+          openssl = pkgs.openssl;
           libnats-c = pkgs.libnats-c;
           catch2_3 = pkgs.catch2_3;
         };
@@ -83,6 +84,7 @@
             pkgs.clang-tools
             pkgs.boost190
             pkgs.spdlog
+            pkgs.openssl
             pkgs.libnats-c
             pkgs.catch2_3
           ]
