@@ -32,4 +32,4 @@ The integer `co_main` returns is logged. The process exits 0 unless an exception
 
 `examples/pub_sub.cpp` connects, subscribes, publishes, and reads one message. Build it with `-DBUILD_TESTS=ON`. It uses `NATS_URL`, or `nats://127.0.0.1:4222`.
 
-`examples/request_reply.cpp` queues one handler and two handlers, then requests a reply from each subject. The executable is `request_reply`. It uses the same `NATS_URL`.
+`examples/request_reply.cpp` queues one handler and two handlers, requests a reply from each subject, then collects many replies by count and by deadline. The executable is `request_reply`. It uses the same `NATS_URL`.

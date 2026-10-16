@@ -21,6 +21,13 @@ auto body = co_await client.request("subject", "payload");
 `request` subscribes a one-shot inbox, publishes with that inbox as the reply subject, and returns the reply body. The overload that takes `vector<pair<string, string>>` sends those pairs as NATS headers.
 
 ```cpp
+auto byCount = co_await client.requestMany("subject", "payload", 3);
+auto byDeadline = co_await client.requestMany("subject", "payload", std::chrono::seconds(1));
+```
+
+`requestMany` publishes one request and collects reply bodies on one inbox. The `size_t` overload waits until that many replies arrive. The `milliseconds` overload returns every reply that arrives before the deadline, and that list can be empty. The wait does not occupy a worker. A server status `503` throws. Each overload has a headers form.
+
+```cpp
 co_await client.respond(message, "payload");
 ```
 
@@ -71,7 +78,7 @@ co_await client.unsubscribe("workers", {"service.echo", "service.time"});
 
 An empty route list does nothing. Duplicate subjects become separate members. `unsubscribe(group, subjects)` sends `UNSUB` for the handlers queued on those subjects. A pull member stays up until `Subscription::unsubscribe`.
 
-`examples/request_reply.cpp` queues one handler on `service.echo` and two handlers on `service.work`, then calls `request`. Build it with `-DBUILD_TESTS=ON`. The executable is `request_reply`.
+`examples/request_reply.cpp` queues one handler on `service.echo` and two handlers on `service.work`, calls `request`, then collects replies from two subscribers on `service.many` by count and by deadline. Build it with `-DBUILD_TESTS=ON`. The executable is `request_reply`.
 
 ## Close
 

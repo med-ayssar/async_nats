@@ -13,6 +13,7 @@
 #pragma once
 
 #include <boost/cobalt/task.hpp>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -291,6 +292,49 @@ class Client {
       -> boost::cobalt::task<std::string>;
 
   /**
+   * @brief Publish `payload` and return `count` reply bodies.
+   *
+   * Scatter-gather form of `request`. One inbox receives every reply. This
+   * overload waits until `count` replies arrive. The wait does not occupy a
+   * worker. Payloads are in arrival order. A server status `503` throws.
+   *
+   * @throws Error The client is empty, `count` is zero, the subject is invalid,
+   * the publish fails, or the connection closes before `count` replies arrive.
+   */
+  auto requestMany(std::string subject, std::string payload, std::size_t count)
+      -> boost::cobalt::task<std::vector<std::string>>;
+
+  /**
+   * @brief Publish `payload` and return the replies that arrive before `deadline`.
+   *
+   * The vector can be empty when the deadline wins. A server status `503` throws.
+   *
+   * @throws Error The client is empty, `deadline` is not positive, the subject is
+   * invalid, or the publish fails.
+   */
+  auto requestMany(std::string subject, std::string payload, std::chrono::milliseconds deadline)
+      -> boost::cobalt::task<std::vector<std::string>>;
+
+  /**
+   * @brief `requestMany` for `count` replies, with NATS headers.
+   *
+   * Each pair is a header name and its value.
+   */
+  auto requestMany(std::string subject, std::string payload,
+                   std::vector<std::pair<std::string, std::string>> headers, std::size_t count)
+      -> boost::cobalt::task<std::vector<std::string>>;
+
+  /**
+   * @brief `requestMany` until `deadline`, with NATS headers.
+   *
+   * Each pair is a header name and its value.
+   */
+  auto requestMany(std::string subject, std::string payload,
+                   std::vector<std::pair<std::string, std::string>> headers,
+                   std::chrono::milliseconds deadline)
+      -> boost::cobalt::task<std::vector<std::string>>;
+
+  /**
    * @brief Publish `payload` to the reply subject of `message`.
    *
    * This is the response half of a request. `request` sends the request and
@@ -313,6 +357,12 @@ class Client {
  private:
   struct Impl;
   explicit Client(std::shared_ptr<Impl> impl);
+
+  auto requestMany(std::string subject, std::string payload,
+                   std::vector<std::pair<std::string, std::string>> headers,
+                   std::optional<std::size_t> count,
+                   std::optional<std::chrono::milliseconds> deadline)
+      -> boost::cobalt::task<std::vector<std::string>>;
 
   std::shared_ptr<Impl> impl_;
 

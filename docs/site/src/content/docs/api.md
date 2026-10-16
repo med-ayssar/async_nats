@@ -119,6 +119,19 @@ auto request(std::string subject, std::string payload,
 
 The same call with NATS headers. Each pair is a header name and its value. Both overloads throw if the request fails or the timeout expires.
 
+### `Client::requestMany`
+
+```cpp
+auto requestMany(std::string subject, std::string payload, std::size_t count)
+    -> boost::cobalt::task<std::vector<std::string>>;
+auto requestMany(std::string subject, std::string payload, std::chrono::milliseconds deadline)
+    -> boost::cobalt::task<std::vector<std::string>>;
+```
+
+Scatter-gather form of `request`. Publishes one request and collects reply bodies on one inbox. Pass `count` to wait for that many replies, or `deadline` to return every reply that arrives before it. The deadline list can be empty. The wait does not occupy a worker thread. A server status `503` throws. `count` must be at least 1. `deadline` must be positive. A count call ends when the connection closes before that many replies arrive.
+
+Both limits have a headers overload. Each pair is a header name and its value.
+
 ### `Client::respond`
 
 ```cpp

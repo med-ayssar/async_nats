@@ -35,7 +35,7 @@ boost::asio::post(AsyncNats::Core::instance().threadPool(), [] {
 
 `examples/pub_sub.cpp` connects, subscribes, publishes, and reads the message back. Build it with `-DBUILD_TESTS=ON`; the executable is `pub_sub`. It uses `NATS_URL`, or `nats://127.0.0.1:4222`.
 
-`examples/request_reply.cpp` queues one handler and two handlers, then sends a request to each subject. The executable is `request_reply`. It uses the same `NATS_URL`.
+`examples/request_reply.cpp` queues one handler and two handlers, sends a request to each subject, then collects many replies by count and by deadline. The executable is `request_reply`. It uses the same `NATS_URL`.
 
 ```cpp
 auto client = co_await AsyncNats::connect("nats://127.0.0.1:4222");
@@ -73,6 +73,13 @@ co_await client.queue("workers", {"service.echo",
       co_await client.respond(message, message.payload);
     }});
 auto body = co_await client.request("service.echo", "ping");
+```
+
+`requestMany` is the scatter-gather form of `request`. Each responder subscribes on its own, so every one receives the request and replies. Pass a count to wait for that many bodies, or a deadline to take every body that arrives before it.
+
+```cpp
+auto byCount = co_await client.requestMany("service.echo", "ping", 2);
+auto byDeadline = co_await client.requestMany("service.echo", "ping", std::chrono::seconds(1));
 ```
 
 The build uses Nix. C++ standard is 23. Choose Clang or GCC.

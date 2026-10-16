@@ -385,9 +385,9 @@ struct Client::Impl : std::enable_shared_from_this<Client::Impl> {
         });
   }
 
-  auto receive(const std::shared_ptr<SubState>& sub,
-               std::optional<std::chrono::milliseconds> timeout = std::nullopt,
-               std::string timeoutError = {}) -> boost::cobalt::task<Message> {
+  auto nextMessage(const std::shared_ptr<SubState>& sub,
+                   std::optional<std::chrono::milliseconds> timeout = std::nullopt)
+      -> boost::cobalt::task<std::optional<Message>> {
     co_await boost::asio::dispatch(executor, boost::cobalt::use_op);
     if (!sub->messages.empty()) {
       auto result = std::move(sub->messages.front());
@@ -405,17 +405,16 @@ struct Client::Impl : std::enable_shared_from_this<Client::Impl> {
       std::shared_ptr<SubState> sub;
       Message result;
       bool failed = false;
+      bool timedOut = false;
       bool settled = false;
       std::string reason;
       ErrorKind kind = ErrorKind::other;
       std::optional<boost::asio::steady_timer> timer;
       boost::asio::any_io_executor executor;
-      std::string timeoutError;
     };
     auto pending = std::make_shared<Pending>();
     pending->sub = sub;
     pending->executor = executor;
-    pending->timeoutError = std::move(timeoutError);
 
     struct Wait {
       std::shared_ptr<Pending> pending;
@@ -436,9 +435,7 @@ struct Client::Impl : std::enable_shared_from_this<Client::Impl> {
             return;
           }
           state->settled = true;
-          state->failed = true;
-          state->reason = state->timeoutError.empty() ? "request: Timeout" : state->timeoutError;
-          state->kind = ErrorKind::other;
+          state->timedOut = true;
           auto resume = state->sub->waiter->coroutine;
           state->sub->waiter.reset();
           boost::asio::post(state->executor, [resume] { resume.resume(); });
@@ -457,7 +454,20 @@ struct Client::Impl : std::enable_shared_from_this<Client::Impl> {
     };
 
     co_await Wait{pending, timeout};
+    if (pending->timedOut) {
+      co_return std::nullopt;
+    }
     co_return std::move(pending->result);
+  }
+
+  auto receive(const std::shared_ptr<SubState>& sub,
+               std::optional<std::chrono::milliseconds> timeout = std::nullopt,
+               std::string timeoutError = {}) -> boost::cobalt::task<Message> {
+    auto message = co_await nextMessage(sub, timeout);
+    if (!message) {
+      throw Error(timeoutError.empty() ? "request: Timeout" : std::move(timeoutError));
+    }
+    co_return std::move(*message);
   }
 
   auto unsubscribe(const std::shared_ptr<SubState>& sub) -> boost::cobalt::task<void> {
@@ -1012,6 +1022,141 @@ auto Client::request(std::string subject, std::string payload,
     std::rethrow_exception(failure);
   }
   co_return body;
+}
+
+auto Client::requestMany(std::string subject, std::string payload, std::size_t count)
+    -> boost::cobalt::task<std::vector<std::string>> {
+  if (count == 0) {
+    throw Error("invalid response count");
+  }
+  co_return co_await requestMany(std::move(subject), std::move(payload), {}, count, std::nullopt);
+}
+
+auto Client::requestMany(std::string subject, std::string payload,
+                         std::chrono::milliseconds deadline)
+    -> boost::cobalt::task<std::vector<std::string>> {
+  if (deadline.count() <= 0) {
+    throw Error("invalid timeout");
+  }
+  co_return co_await requestMany(std::move(subject), std::move(payload), {}, std::nullopt,
+                                 deadline);
+}
+
+auto Client::requestMany(std::string subject, std::string payload,
+                         std::vector<std::pair<std::string, std::string>> headers,
+                         std::size_t count) -> boost::cobalt::task<std::vector<std::string>> {
+  if (count == 0) {
+    throw Error("invalid response count");
+  }
+  co_return co_await requestMany(std::move(subject), std::move(payload), std::move(headers), count,
+                                 std::nullopt);
+}
+
+auto Client::requestMany(std::string subject, std::string payload,
+                         std::vector<std::pair<std::string, std::string>> headers,
+                         std::chrono::milliseconds deadline)
+    -> boost::cobalt::task<std::vector<std::string>> {
+  if (deadline.count() <= 0) {
+    throw Error("invalid timeout");
+  }
+  co_return co_await requestMany(std::move(subject), std::move(payload), std::move(headers),
+                                 std::nullopt, deadline);
+}
+
+auto Client::requestMany(std::string subject, std::string payload,
+                         std::vector<std::pair<std::string, std::string>> headers,
+                         std::optional<std::size_t> count,
+                         std::optional<std::chrono::milliseconds> deadline)
+    -> boost::cobalt::task<std::vector<std::string>> {
+  if (!impl_) {
+    throw Error("client is not connected");
+  }
+  requireSubject(subject);
+  const auto payloadLength = checkedLength(payload);
+  auto state = impl_;
+  co_await boost::asio::dispatch(state->executor, boost::cobalt::use_op);
+
+  auto inbox = co_await runBlocking(state->executor, [] {
+    natsInbox* created = nullptr;
+    requireStatus(natsInbox_Create(&created), "create inbox");
+    struct InboxGuard {
+      natsInbox* value;
+      ~InboxGuard() { natsInbox_Destroy(value); }
+    } guard{created};
+    return std::string(created);
+  });
+
+  auto subscription = std::make_shared<Impl::SubState>();
+  subscription->connection = state;
+  subscription->subject = inbox;
+  state->subscriptions.push_back(subscription);
+
+  std::exception_ptr failure;
+  std::vector<std::string> bodies;
+  try {
+    co_await state->openSubscription(subscription, std::nullopt);
+    auto lease = std::make_shared<Impl::NativeLease>(*state);
+    co_await runBlocking(state->executor, [lease = std::move(lease), subject = std::move(subject),
+                                           payload = std::move(payload),
+                                           headers = std::move(headers), payloadLength,
+                                           inbox]() mutable {
+      natsMsg* outbound = nullptr;
+      requireStatus(
+          natsMsg_Create(&outbound, subject.c_str(), inbox.c_str(), payload.data(), payloadLength),
+          "create request message");
+      struct MessageGuard {
+        natsMsg* value;
+        ~MessageGuard() { natsMsg_Destroy(value); }
+      } guard{outbound};
+      for (const auto& [name, value] : headers) {
+        requireStatus(natsMsgHeader_Add(outbound, name.c_str(), value.c_str()),
+                      "set request header");
+      }
+      requireStatus(natsConnection_PublishMsg(lease->connection, outbound), "requestMany");
+    });
+    std::optional<std::chrono::steady_clock::time_point> deadlineAt;
+    if (deadline) {
+      deadlineAt = std::chrono::steady_clock::now() + *deadline;
+    }
+    while (!count || bodies.size() < *count) {
+      std::optional<std::chrono::milliseconds> budget;
+      if (deadlineAt) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= *deadlineAt) {
+          budget = std::chrono::milliseconds::zero();
+        } else {
+          budget = std::chrono::duration_cast<std::chrono::milliseconds>(*deadlineAt - now);
+          if (budget->count() <= 0) {
+            budget = std::chrono::milliseconds(1);
+          }
+        }
+      }
+      auto message = co_await state->nextMessage(subscription, budget);
+      if (!message) {
+        break;
+      }
+      if (message->noResponders) {
+        if (bodies.empty()) {
+          throw Error("requestMany: " + statusText(NATS_NO_RESPONDERS));
+        }
+        break;
+      }
+      bodies.push_back(std::move(message->payload));
+    }
+  } catch (...) {
+    failure = std::current_exception();
+  }
+  try {
+    co_await state->unsubscribe(subscription);
+  } catch (...) {
+    if (!failure) {
+      failure = std::current_exception();
+    }
+  }
+  if (failure) {
+    std::rethrow_exception(failure);
+  }
+  co_return bodies;
 }
 
 auto Client::respond(const Message& message, std::string payload) -> boost::cobalt::task<void> {
