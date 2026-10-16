@@ -114,4 +114,4 @@ Docktopus’s `CMakeLists.txt` maps imported Debug to `Debug Release RelWithDebI
 
 `devShells.default` is `shellFor system "clang" "debug"`. `./build.sh` builds `.#docktopus-${compiler}-debug` unless `--release` is passed, then configures the checkout with `nix develop` on that same attribute. `./start.sh` is `nix shell .`, which runs the default Clang Debug package. `source env/main.zsh` is `nix develop .`, so clangd’s compiler and the headers on the prefix come from the Clang Debug shell.
 
-`flake.lock` pins the async_nats commit. `./build.sh` and `./start.sh` use that pin. `./install.sh` adds `--override-input async_nats git+file:../async_nats`, so an install builds the sibling checkout. An override does not rewrite the lock.
+`flake.lock` pins the async_nats commit. `./build.sh`, `./start.sh`, and `./install.sh` use that pin.
