@@ -2,8 +2,9 @@
  * @file AsyncNats.h
  * @brief Application entry point declaration for the AsyncNats runtime.
  *
- * Include this header to define the application's `co_main`. The full client
- * API is available through `<AsyncNats/client.h>`.
+ * Include this header to define the application's `co_main`. The library defines
+ * `main` unless it was built with `-DwithMain=OFF`. The full client API is
+ * available through `<AsyncNats/client.h>`.
  */
 #pragma once
 
@@ -22,7 +23,7 @@ void onError(ErrorHandler handler);
 /**
  * @brief Application entry the library calls from `main`.
  *
- * Define this in the program that links `AsyncNats::AsyncNats`. The returned
+ * Define this unless the library was built with `-DwithMain=OFF`. The returned
  * integer is logged. The process exits 0 unless an exception escapes.
  * Register `AsyncNats::onError` before the first `co_await`.
  */

@@ -88,8 +88,30 @@ unset(_async_nats_dep)
 unset(_async_nats_dep_includes)
 unset(_async_nats_dep_include)
 
-# Sources are listed explicitly. The event loop is
-# src/AsyncNats/core/eventLoop/EventLoop.cpp.
+# main and the event loop that runs co_main are in the library by default.
+# -DwithMain=OFF and -DASYNC_NATS_WITH_MAIN=OFF leave both out, so the
+# application supplies main. -DwithMain=ON is the same switch as
+# -DASYNC_NATS_WITH_MAIN=ON.
+if(DEFINED withMain)
+    if(withMain)
+        set(_async_nats_with_main ON)
+    else()
+        set(_async_nats_with_main OFF)
+    endif()
+    set(ASYNC_NATS_WITH_MAIN "${_async_nats_with_main}" CACHE BOOL
+        "Include process main in the library. main runs the application's co_main." FORCE)
+    unset(_async_nats_with_main)
+endif()
+option(ASYNC_NATS_WITH_MAIN
+    "Include process main in the library. main runs the application's co_main."
+    ON)
+
+# Sources are listed explicitly. main and the event loop that calls co_main
+# are src/AsyncNats/core/Main.cpp and src/AsyncNats/core/eventLoop/EventLoop.cpp.
+set(ASYNC_NATS_ENTRY_SOURCES
+    src/AsyncNats/core/Main.cpp
+    src/AsyncNats/core/eventLoop/EventLoop.cpp
+)
 set(ASYNC_NATS_CLIENT_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/client/include)
 set(ASYNC_NATS_CORE_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/core/include)
 set(ASYNC_NATS_EVENT_LOOP_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/AsyncNats/core/eventLoop/include)
@@ -121,13 +143,14 @@ target_link_libraries(AsyncNatsObjects PUBLIC
     cnats::nats
 )
 
-add_library(AsyncNats STATIC
-    src/AsyncNats/core/Main.cpp
-    src/AsyncNats/core/eventLoop/EventLoop.cpp
-    $<TARGET_OBJECTS:AsyncNatsObjects>
-)
+add_library(AsyncNats STATIC)
 add_library(AsyncNats::AsyncNats ALIAS AsyncNats)
 add_dependencies(AsyncNats AsyncNatsObjects)
+target_sources(AsyncNats PRIVATE $<TARGET_OBJECTS:AsyncNatsObjects>)
+if(ASYNC_NATS_WITH_MAIN)
+    target_sources(AsyncNats PRIVATE ${ASYNC_NATS_ENTRY_SOURCES})
+    target_compile_definitions(AsyncNats PUBLIC ASYNC_NATS_WITH_MAIN=1)
+endif()
 
 set_target_properties(AsyncNats PROPERTIES
     EXPORT_NAME AsyncNats
@@ -237,5 +260,15 @@ if(BUILD_TESTS)
     target_link_libraries(request_reply PRIVATE AsyncNats)
     if(ASYNC_NATS_LIBCXX_INCLUDE)
         target_include_directories(request_reply SYSTEM PRIVATE "${ASYNC_NATS_LIBCXX_INCLUDE}")
+    endif()
+
+    # The samples define co_main. When the library was built without main,
+    # compile that entry into each sample.
+    if(NOT ASYNC_NATS_WITH_MAIN)
+        foreach(_async_nats_sample IN ITEMS pub_sub request_reply)
+            target_sources(${_async_nats_sample} PRIVATE ${ASYNC_NATS_ENTRY_SOURCES})
+            target_include_directories(${_async_nats_sample} PRIVATE ${ASYNC_NATS_EVENT_LOOP_INCLUDE})
+        endforeach()
+        unset(_async_nats_sample)
     endif()
 endif()

@@ -2,7 +2,8 @@
  * @file AsyncNats/client.h
  * @brief NATS client, JetStream key-value store, and object store.
  *
- * The library owns process `main`. The application defines `co_main` and links
+ * The library defines `main` and the application defines `co_main`. Pass
+ * `-DwithMain=OFF` to leave `main` out of the library. Link
  * `AsyncNats::AsyncNats`. This header is the client API. The IO runtime is
  * `<AsyncNats/core/Core.h>`.
  *

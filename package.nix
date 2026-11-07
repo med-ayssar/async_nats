@@ -7,6 +7,7 @@
   libraries,
   catch2_3,
   withTests ? false,
+  withMain ? true,
   buildType ? "Debug",
 }:
 let
@@ -54,6 +55,7 @@ stdenv.mkDerivation {
     "-DCMAKE_CXX_STANDARD=23"
     "-DCMAKE_CXX_STANDARD_REQUIRED=ON"
     "-DCMAKE_CXX_EXTENSIONS=OFF"
+    "-DwithMain=${if withMain then "ON" else "OFF"}"
   ]
   ++ lib.optionals withTests [
     "-DBUILD_TESTS=ON"
